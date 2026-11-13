@@ -1,0 +1,40 @@
+{
+  "name": "ultimate-hub",
+  "productName": "Ultimate Hub",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "description": "One window for every local Ultimate",
+  "author": "Laurent Wiesel",
+  "main": "out/main/index.js",
+  "bin": {
+    "uh": "bin/uh.ts"
+  },
+  "scripts": {
+    "build": "electron-vite build",
+    "dist": "electron-vite build && electron-builder",
+    "typecheck": "tsc --noEmit",
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test test/*.test.ts",
+    "verify": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/verify.ts",
+    "verify:uh": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/verify-uh.ts"
+  },
+  "engines": {
+    "node": ">=26"
+  },
+  "packageManager": "pnpm@11.8.0",
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@xterm/addon-fit": "0.11.0",
+    "@xterm/addon-unicode-graphemes": "0.4.0",
+    "@xterm/xterm": "6.0.0",
+    "electron": "45.2.1",
+    "electron-builder": "26.18.0",
+    "electron-vite": "6.0.0",
+    "playwright": "1.64.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5"
+  },
+  "dependencies": {
+    "node-pty": "1.1.0"
+  }
+}

@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'" />
+    <title>Terminal</title>
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        background: #101114;
+      }
+      #terminal {
+        position: absolute;
+        inset: 4px 0 0 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="terminal"></div>
+    <script type="module" src="./terminal.ts"></script>
+  </body>
+</html>

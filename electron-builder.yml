@@ -1,0 +1,13 @@
+appId: com.justlyai.ultimate-hub
+files:
+  - out/**
+  - package.json
+  - LICENSE
+  - THIRD_PARTY_LICENSES.md
+directories:
+  output: dist
+mac:
+  target:
+    - target: dir
+      arch: arm64
+  identity: null

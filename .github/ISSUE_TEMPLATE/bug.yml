@@ -1,0 +1,27 @@
+name: Bug
+description: Something in Ultimate Hub does not work as expected.
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: macOS version, Mac model, Ultimate version, and Hub commit
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: hub.log lines
+      description: From ~/Library/Application Support/Ultimate Hub/hub.log. Remove private paths and project names first.
+      render: text

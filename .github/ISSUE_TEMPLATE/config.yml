@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security report
+    url: https://github.com/JustlyAI/ultimate-hub/security/advisories/new
+    about: Report a vulnerability privately. Do not open a public issue.
+  - name: Ultimate itself
+    url: https://github.com/HazAT/ultimate/issues
+    about: Problems with the agent or its web UI belong in Ultimate.
