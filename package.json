@@ -16,7 +16,8 @@
     "typecheck": "tsc --noEmit",
     "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test test/*.test.ts",
     "verify": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/verify.ts",
-    "verify:uh": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/verify-uh.ts"
+    "verify:uh": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/verify-uh.ts",
+    "demo": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/demo.ts"
   },
   "engines": {
     "node": ">=26"
