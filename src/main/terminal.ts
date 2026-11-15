@@ -3,7 +3,7 @@ import { userInfo } from 'node:os'
 import { join } from 'node:path'
 import { type BaseWindow, type Input, ipcMain, type IpcMainEvent, type WebContents, WebContentsView } from 'electron'
 import { type IPty, spawn } from 'node-pty'
-import { PANEL_GAP } from '../shared/tabs'
+import { DRAG_STRIP, PANEL_GAP } from '../shared/tabs'
 
 const MIN_PANEL_HEIGHT = 100
 const MIN_PAGE_HEIGHT = 120
@@ -41,7 +41,7 @@ export function createTerminals(window: BaseWindow, { onInput, log, relayout, fo
   const shownRoot = () => (panel.shown ? selected : null)
   const windowHeight = () => window.getContentBounds().height
 
-  const limited = (height: number, total: number) => Math.max(MIN_PANEL_HEIGHT, Math.min(height, total - PANEL_GAP - MIN_PAGE_HEIGHT))
+  const limited = (height: number, total: number) => Math.max(MIN_PANEL_HEIGHT, Math.min(height, total - DRAG_STRIP - PANEL_GAP - MIN_PAGE_HEIGHT))
   const panelHeight = (total: number) => limited(panel.height ?? Math.round(total / 3), total)
 
   function open(root: string): boolean {
@@ -159,9 +159,9 @@ export function createTerminals(window: BaseWindow, { onInput, log, relayout, fo
       }
       return shownHeight
     },
-    mainHeight(): number {
+    pageHeight(): number {
       const height = windowHeight()
-      return shownRoot() === null ? height : height - panelHeight(height) - PANEL_GAP
+      return height - DRAG_STRIP - (shownRoot() === null ? 0 : panelHeight(height) + PANEL_GAP)
     },
     hasFocus: () => [...terminals.values()].some(({ view }) => view.webContents.isFocused()),
     focus() {

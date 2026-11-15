@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { type BaseWindow, type Input, shell, type WebContents, WebContentsView } from 'electron'
-import { portOf, type MainArea, type TabsState } from '../shared/tabs'
+import { DRAG_STRIP, portOf, type MainArea, type TabsState } from '../shared/tabs'
 
 type Page = { view: WebContentsView; port: number }
 
@@ -18,7 +18,7 @@ function openExternal(url: string) {
 export function createPages(
   window: BaseWindow,
   onInput: (event: Electron.Event, input: Input, from: WebContents) => void,
-  mainHeight: () => number,
+  pageHeight: () => number,
   sidebarWidth: () => number,
 ) {
   const pages = new Map<string, Page>()
@@ -28,7 +28,7 @@ export function createPages(
   function layout(page: Page) {
     const { width } = window.getContentBounds()
     const left = sidebarWidth()
-    page.view.setBounds({ x: left, y: 0, width: width - left, height: mainHeight() })
+    page.view.setBounds({ x: left, y: DRAG_STRIP, width: width - left, height: pageHeight() })
   }
 
   function close(root: string) {

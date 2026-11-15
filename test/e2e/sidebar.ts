@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { RAIL_WIDTH, SIDEBAR_WIDTH } from '../../src/shared/tabs.ts'
+import { DRAG_STRIP, RAIL_WIDTH, SIDEBAR_WIDTH } from '../../src/shared/tabs.ts'
 import { sleep, startStub, tempDir, until, type Stub } from '../support/fixtures.ts'
 import { Hub } from '../support/hub.ts'
 import { EVIDENCE, type Check } from '../support/report.ts'
@@ -157,6 +157,41 @@ export async function runSidebarChecks(check: Check) {
       assert.deepEqual(lights, { x: 14, y: 13 })
       assert.deepEqual(row, { height: 40, logoX: 78, name: 'Ultimate Hub', buttons: ['terminal-toggle', 'search-open', 'sidebar-toggle'], drag: 'drag', buttonDrag: ['no-drag'] })
       return `Window buttons at ${JSON.stringify(lights)}. Top row ${JSON.stringify(row)}`
+    })
+
+    await check(section, 'a strip above the page moves the window across the full width, beside the sidebar and the rail, and not while a dialog is open', async () => {
+      const strip = () =>
+        hub.shell().evaluate(() => {
+          const element = document.querySelector('#drag-strip')!
+          const { x, y, width, height } = element.getBoundingClientRect()
+          return { x, y, width, height, drag: getComputedStyle(element).getPropertyValue('app-region') }
+        })
+      const page = () =>
+        hub.evaluate(({ BaseWindow }) => {
+          const views = BaseWindow.getAllWindows()[0].contentView.children as Electron.WebContentsView[]
+          return views.find((view) => view.getVisible() && !view.webContents.getURL().startsWith('file:'))!.getBounds()
+        }, null)
+      const [width] = await hub.evaluate(({ BaseWindow }) => BaseWindow.getAllWindows()[0].getContentSize(), null)
+      const forms: string[] = []
+      for (const left of [SIDEBAR_WIDTH, RAIL_WIDTH]) {
+        if (left === RAIL_WIDTH) await hub.shell().locator('#sidebar-toggle').click()
+        await viewsAt(hub, left)
+        const shown = await strip()
+        assert.deepEqual(shown, { x: left, y: 0, width: width - left, height: DRAG_STRIP, drag: 'drag' })
+        const bounds = await page()
+        assert.equal(bounds.y, DRAG_STRIP, 'the page starts under the strip')
+        forms.push(`strip ${JSON.stringify(shown)}, page ${JSON.stringify(bounds)}`)
+      }
+      await shot('sidebar-strip-rail.png')
+      await hub.shell().locator('#sidebar-toggle').click()
+      await viewsAt(hub, SIDEBAR_WIDTH)
+      await hub.planMenus(['Group'])
+      await hub.shell().locator('#add').click()
+      await hub.shell().locator('#name-dialog[open]').waitFor()
+      const inDialog = (await strip()).drag
+      await hub.shell().locator('#name-cancel').click()
+      assert.equal(inDialog, 'no-drag')
+      return `${forms.join('. ')}. With the group dialog open, the strip is no-drag.`
     })
 
     await check(section, 'a click on the sidebar button leaves a rail with the window buttons and that button under them, moves the page, and saves the form', async () => {

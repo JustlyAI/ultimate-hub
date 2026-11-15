@@ -3,6 +3,8 @@ export const SIDEBAR_WIDTH = 280
 export const RAIL_WIDTH = 80
 /** The gap between a page and the terminal panel. The sidebar view shows through it, and it is the drag handle. */
 export const PANEL_GAP = 6
+/** The strip above the pages that moves the window. A page is Ultimate's own, so it cannot hold a drag region. */
+export const DRAG_STRIP = 12
 
 // A running project, read from disk and proven. Never saved by the app.
 export type Instance = {
