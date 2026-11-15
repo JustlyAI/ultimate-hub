@@ -176,7 +176,7 @@ else app.whenReady().then(async () => {
   const focusMain = () => !raised() && pages.focus(shell.webContents)
   const width = () => sidebarWidth(state.saved.sidebar)
   const terminals = createTerminals(window, { onInput, log, relayout: layout, focusMain, sidebarWidth: width })
-  const pages = createPages(window, onInput, () => terminals.mainHeight(), width)
+  const pages = createPages(window, onInput, () => terminals.pageHeight(), width)
   app.on('will-quit', () => terminals.endAll())
   shell.webContents.on('before-input-event', (event, input) => onInput(event, input, shell.webContents))
 

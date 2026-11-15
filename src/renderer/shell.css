@@ -62,8 +62,20 @@ body {
   app-region: drag;
 }
 
+/* Above the pages, so the whole top edge of the window moves it. */
+#drag-strip {
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: var(--sidebar-width);
+  height: var(--drag-strip);
+  background: #111318;
+  app-region: drag;
+}
+
 #brand button,
-body:has(dialog[open]) #brand {
+body:has(dialog[open]) #brand,
+body:has(dialog[open]) #drag-strip {
   app-region: no-drag;
 }
 
