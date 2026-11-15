@@ -1,6 +1,12 @@
+<p align="center">
+  <img src="build/icon.svg" width="128" alt="Ultimate Hub logo">
+</p>
+
 # Ultimate Hub
 
 I built Ultimate Hub because I run many copies of [Ultimate](https://github.com/HazAT/ultimate) at once, and I kept losing them among my Chrome tabs. Ultimate does all the real work. Hub only puts every Ultimate on your Mac in one window, with one named tab for each. It is a small tool that I made for my own work, and I share it in case it helps you too.
+
+[![Ultimate Hub with four Ultimates: switching tabs, a group, status, the hidden sidebar, the terminal, and search](docs/demo/ultimate-hub.gif)](docs/demo/ultimate-hub.mp4)
 
 The app finds each running Ultimate from the small lock file that Ultimate keeps in `~/.ultimate/projects/`. The lock holds only a process ID, a port, and the project path. The app itself does not read your project's files or your conversations, because each tab shows Ultimate's own page. The app writes nothing in your projects or in Ultimate's folders. It starts or stops an Ultimate only when you add it through **+ > Ultimate**, or use Pause, Play, or Close on its row. It opens no network port. If you close the app, every Ultimate continues to run. The other processes it starts are the shells in its terminal panel.
 

@@ -13,6 +13,7 @@ pnpm typecheck
 pnpm test        # pure tab rules, and the `uh` CLI against a fake Ultimate
 pnpm -s verify:uh  # drive `uh` against one real Ultimate, with no build of the app
 pnpm -s verify   # drive the packaged app, or add: rules groups launch real scale search zoom terminal lifecycle window sidebar
+pnpm -s demo     # record the README demo in docs/demo from the packaged app and four real Ultimates
 ```
 
 `pnpm dist` compiles `node-pty` for Electron, so it needs the Xcode Command Line Tools.
@@ -32,4 +33,5 @@ pnpm -s verify   # drive the packaged app, or add: rules groups launch real scal
 - `src/shared/menu.ts`: the types of a native menu and of a question that cross IPC.
 - `src/preload/index.ts` and `src/renderer/`: the sidebar, the messages, and the panel's drag handle. `src/renderer/name-dialog.ts` is the group name dialog, `src/renderer/sheet.ts` is the question dialog over the whole window, `src/renderer/search.ts` is the search panel, and `src/renderer/rail.ts` is the tiles of the hidden sidebar.
 - `src/preload/terminal.ts` and `src/renderer/terminal.ts`: the xterm.js screen of one shell.
+- `scripts/demo.ts` and `scripts/demo-render.mjs`: the README demo. `demo.ts` drives the app and captures frames, and `demo-render.mjs` runs in Electron, draws the cursor and captions, and pipes frames to ffmpeg. It needs `ffmpeg` on `PATH`.
 - `test/`, `scripts/verify.ts`, `scripts/verify-uh.ts`, `scripts/measure-startup.ts`, and `scripts/measure-status.ts`: the proof.
