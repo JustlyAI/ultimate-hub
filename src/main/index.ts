@@ -7,6 +7,7 @@ import {
   mainOf,
   portOf,
   reduce,
+  rootAtUrl,
   selectedRoot,
   sidebarOf,
   sidebarWidth,
@@ -176,7 +177,12 @@ else app.whenReady().then(async () => {
   const focusMain = () => !raised() && pages.focus(shell.webContents)
   const width = () => sidebarWidth(state.saved.sidebar)
   const terminals = createTerminals(window, { onInput, log, relayout: layout, focusMain, sidebarWidth: width })
-  const pages = createPages(window, onInput, () => terminals.pageHeight(), width)
+  const openTab = (url: string) => {
+    const root = rootAtUrl(state, url)
+    if (root !== null) dispatch({ type: 'select', root })
+    return root !== null
+  }
+  const pages = createPages(window, onInput, () => terminals.pageHeight(), width, openTab)
   app.on('will-quit', () => terminals.endAll())
   shell.webContents.on('before-input-event', (event, input) => onInput(event, input, shell.webContents))
 

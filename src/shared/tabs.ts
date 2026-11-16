@@ -194,6 +194,14 @@ export function portOf(state: TabsState, root: string): number | null {
   return state.instances.find((instance) => instance.root === root)?.port ?? null
 }
 
+/** The running project that a link goes to, so that a link from one Ultimate to another opens its tab. */
+export function rootAtUrl(state: TabsState, url: string): string | null {
+  const address = URL.parse(url)
+  if (address?.protocol !== 'http:' || !/^(127\.0\.0\.1|localhost|\[::1\])$/.test(address.hostname)) return null
+  const port = Number(address.port || 80)
+  return state.instances.find((instance) => instance.port === port)?.root ?? null
+}
+
 export const folderName = (root: string) => root.split('/').pop() ?? root
 
 const labelOf = (tab: SavedTab) => tab.name ?? folderName(tab.root)

@@ -32,6 +32,7 @@ Build the app on the Mac that uses it. The build is not signed, so macOS can blo
 - **Status.** The **Status** list sorts the running tabs by what each Ultimate reports: **Needs You**, **Failed**, **Working**, **Done**, **Idle**, or **Unknown**. When you hide the sidebar, the strip that stays shows each tab with a status dot. Hub asks each Ultimate every 5 seconds.
 - **Terminal.** `` Ctrl+` `` opens a shell in the selected project's folder. Each tab keeps its own shell.
 - **Search.** `⌘⇧F` finds a running tab by name, folder, or group.
+- **Links.** A link from one Ultimate to another, such as a row in Ultimate's project rail, selects that Ultimate's tab. Other links to a different site open in your default browser.
 
 Right-click a tab, or click its `⋯`, to rename it, move it, or close its Ultimate. The pause button on a row stops that Ultimate, and the play button starts it again.
 
@@ -54,6 +55,7 @@ Right-click a tab, or click its `⋯`, to rename it, move it, or close its Ultim
 - A tab's shell ends when the tab leaves the list, and every shell ends when you quit the app. The panel's height is not saved. In the shell, `⌘K`, `⌘W`, and `⌘1` to `⌘9` do nothing. If the project folder is missing, the panel does not open, and the error goes to `hub.log` in the app's user data folder.
 - Drafts belong to a port. A project that returns on a different port does not show its drafts until it gets the old port back. Use `--port` to keep one port.
 - Drafts in Chrome do not move to the app.
+- A link to another Ultimate selects its tab but ignores the path of the link. After a click on Ultimate's project rail, the old tab can show "opening…" for up to 15 seconds.
 - The app shows only projects under `~/.ultimate/projects/`.
 - Each opened tab uses about 300 to 350 MB.
 - Groups report per Ultimate, not per conversation.

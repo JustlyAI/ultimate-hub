@@ -20,6 +20,7 @@ export function createPages(
   onInput: (event: Electron.Event, input: Input, from: WebContents) => void,
   pageHeight: () => number,
   sidebarWidth: () => number,
+  openTab: (url: string) => boolean,
 ) {
   const pages = new Map<string, Page>()
   let shown: string | null = null
@@ -40,20 +41,25 @@ export function createPages(
     page.view.webContents.close()
   }
 
+  // Another project's link opens its tab. Any other link opens in the browser.
+  const leave = (url: string) => {
+    if (!openTab(url)) openExternal(url)
+  }
+
   function open(root: string, port: number) {
     const view = new WebContentsView({ webPreferences: { partition: partitionOf(root), focusOnNavigation: false } })
     const page = { view, port }
     const contents = view.webContents
     view.setBackgroundColor('#16181d')
     contents.setWindowOpenHandler(({ url }) => {
-      openExternal(url)
+      leave(url)
       return { action: 'deny' }
     })
     const keepOnProject = (event: Electron.Event<Electron.WebContentsWillRedirectEventParams>) => {
       // An iframe can show any site. Only the main frame decides which project the tab shows.
       if (!event.isMainFrame || new URL(event.url).origin === addressOf(page.port)) return
       event.preventDefault()
-      openExternal(event.url)
+      leave(event.url)
     }
     contents.on('will-navigate', keepOnProject)
     contents.on('will-redirect', keepOnProject)
