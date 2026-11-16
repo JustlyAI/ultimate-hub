@@ -1,10 +1,10 @@
 import type { Hub } from '../preload'
 import type { MenuChoice, Point } from '../shared/menu'
 import {
-  DRAG_STRIP,
   groupNameRefusal,
   PANEL_GAP,
   sidebarWidth,
+  TITLE_BAR,
   UNGROUPED,
   type GroupId,
   type GroupView,
@@ -23,7 +23,7 @@ import { openSearch, refreshSearch } from './search'
 declare const hub: Hub
 
 document.documentElement.style.setProperty('--panel-gap', `${PANEL_GAP}px`)
-document.documentElement.style.setProperty('--drag-strip', `${DRAG_STRIP}px`)
+document.documentElement.style.setProperty('--title-bar', `${TITLE_BAR}px`)
 
 // macOS's default double-click time. A double-click starts a rename, so its second click must land on the same row.
 const DOUBLE_CLICK_MS = 500

@@ -25,7 +25,7 @@ import { loadBounds, MIN_SIZE, placeWindow, rememberBounds } from './window'
 // A new Ultimate must appear within about two seconds.
 const SCAN_INTERVAL_MS = 1000
 // The window buttons sit in the sidebar's top row, which is 40 points tall, and fit in the rail.
-const TRAFFIC_LIGHTS = { x: 14, y: 13 }
+const TRAFFIC_LIGHTS = { x: 14, y: 16 }
 
 const logged = new Set<string>()
 function log(line: string) {

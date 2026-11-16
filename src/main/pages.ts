@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { type BaseWindow, type Input, shell, type WebContents, WebContentsView } from 'electron'
-import { DRAG_STRIP, portOf, type MainArea, type TabsState } from '../shared/tabs'
+import { portOf, TITLE_BAR, type MainArea, type TabsState } from '../shared/tabs'
 
 type Page = { view: WebContentsView; port: number }
 
@@ -28,7 +28,7 @@ export function createPages(
   function layout(page: Page) {
     const { width } = window.getContentBounds()
     const left = sidebarWidth()
-    page.view.setBounds({ x: left, y: DRAG_STRIP, width: width - left, height: pageHeight() })
+    page.view.setBounds({ x: left, y: TITLE_BAR, width: width - left, height: pageHeight() })
   }
 
   function close(root: string) {

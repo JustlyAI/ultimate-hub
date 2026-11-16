@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { parseBounds, placeWindow } from '../src/main/window.ts'
+import { TITLE_BAR } from '../src/shared/tabs.ts'
 
 const laptop = { x: 0, y: 33, width: 1512, height: 877 }
 const external = { x: 1512, y: 0, width: 2560, height: 1415 }
@@ -25,7 +26,9 @@ test('a window partly off a display keeps its place while the left 80 points of 
   assert.deepEqual(placeWindow(reachable, [laptop], laptop), reachable)
   assert.deepEqual(placeWindow({ ...reachable, x: 1433 }, [laptop], laptop), centeredOnLaptop)
   assert.deepEqual(placeWindow({ ...reachable, x: -1 }, [laptop], laptop), centeredOnLaptop)
-  assert.deepEqual(placeWindow({ ...reachable, x: 0, y: 870 }, [laptop], laptop), { ...reachable, x: 0, y: 870 })
+  const lowest = laptop.y + laptop.height - TITLE_BAR
+  assert.deepEqual(placeWindow({ ...reachable, x: 0, y: lowest }, [laptop], laptop), { ...reachable, x: 0, y: lowest })
+  assert.deepEqual(placeWindow({ ...reachable, x: 0, y: lowest + 1 }, [laptop], laptop), centeredOnLaptop)
 })
 
 test('a top row above or below the work area does not count, even if the rest of the window is on it', () => {

@@ -1,10 +1,11 @@
-export const SIDEBAR_WIDTH = 280
+/** Wide enough for the name in the top row beside its three buttons. */
+export const SIDEBAR_WIDTH = 308
 /** The hidden sidebar leaves this strip, with the window buttons and the one button that shows the sidebar again. */
 export const RAIL_WIDTH = 80
 /** The gap between a page and the terminal panel. The sidebar view shows through it, and it is the drag handle. */
 export const PANEL_GAP = 6
-/** The strip above the pages that moves the window. A page is Ultimate's own, so it cannot hold a drag region. */
-export const DRAG_STRIP = 12
+/** The height of the title bar: the sidebar's top row, and the bar above the pages. It moves the window. A page is Ultimate's own, so it cannot hold a drag region. */
+export const TITLE_BAR = 46
 
 // A running project, read from disk and proven. Never saved by the app.
 export type Instance = {
