@@ -9,6 +9,7 @@ import {
   initialState,
   mainOf,
   reduce,
+  rootAtUrl,
   searchOf,
   selectedRoot,
   sidebarOf,
@@ -1061,4 +1062,20 @@ test('tabs.json lifecycle records: a missing record reads as none, and a bad one
   assert.deepEqual(parseSaved(tab({ kind: 'paused', launcher: LAUNCHER, extra: 1 })).tabs[0].lifecycle, { kind: 'paused', launcher: LAUNCHER })
   for (const bad of [{ kind: 'paused' }, { kind: 'paused', launcher: { node: 'node', entry: '/u/bin/ultimate.ts' } }, { kind: 'stop-requested' }, 'paused'])
     assert.throws(() => parseSaved(tab(bad)), `should reject ${JSON.stringify(bad)}`)
+})
+
+test('a loopback link to the port of a running project names that project', () => {
+  const state = run(initialState(savedOf()), scan(live(A, 4100), live(B, 4200)))
+  assert.equal(rootAtUrl(state, 'http://127.0.0.1:4200/'), B)
+  assert.equal(rootAtUrl(state, 'http://localhost:4100/c/12?x=1'), A)
+  assert.equal(rootAtUrl(state, 'http://[::1]:4200'), B)
+})
+
+test('a link to another host, another port, or another scheme names no project', () => {
+  const state = run(initialState(savedOf()), scan(live(A, 4100)))
+  assert.equal(rootAtUrl(state, 'http://example.com:4100/'), null)
+  assert.equal(rootAtUrl(state, 'http://127.0.0.1:4999/'), null)
+  assert.equal(rootAtUrl(state, 'https://127.0.0.1:4100/'), null)
+  assert.equal(rootAtUrl(state, 'mailto:someone@example.com'), null)
+  assert.equal(rootAtUrl(state, 'not a url'), null)
 })

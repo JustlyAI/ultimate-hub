@@ -810,24 +810,38 @@ export async function runRuleChecks(check: Check) {
     }
   })
 
-  await check(section, 'a redirect to another project stays out of the tab', () =>
+  await check(section, 'a link, a new window, or a redirect to another project selects its tab', () =>
     withHub(async ({ hub, home, projects }) => {
       const a = await startStub(home, join(projects, 'alpha'))
       const b = await startStub(home, join(projects, 'beta'))
       await appear(hub, 'alpha')
+      await appear(hub, 'beta')
       await hub.spyOnExternal()
       const page = await until('page', () => hub.shownPage())
-      const target = `http://127.0.0.1:${b.port}/`
-      await page.evaluate((to) => {
-        setTimeout(() => (location.href = `/redirect?to=${encodeURIComponent(to)}`), 0)
-      }, target)
-      await until('the browser gets the address', async () => (await hub.externals()).includes(target))
-      await sleep(NEXT_SCAN_MS)
-      assert.equal(await rootOf(hub), a.root)
-      assert.equal((await hub.tab('alpha'))?.selected, true)
+      const address = page.url()
+      // The address that Ultimate's project rail links to.
+      const target = `http://localhost:${b.port}/`
+      for (const way of ['link', 'new window', 'redirect'] as const) {
+        await until('alpha is selected', async () => (await hub.tab('alpha'))?.selected)
+        // Playwright waits forever for a navigation that the app blocks, so the page starts it later.
+        await page.evaluate(
+          ([way, to]) =>
+            void setTimeout(() => {
+              if (way === 'link') location.href = to
+              else if (way === 'new window') window.open(to)
+              else location.href = `/redirect?to=${encodeURIComponent(to)}`
+            }, 0),
+          [way, target] as const,
+        )
+        await until(`the ${way} selects beta`, async () => (await hub.tab('beta'))?.selected)
+        await until("beta's page shows", async () => (await rootOf(hub)) === b.root)
+        assert.equal(page.url(), address)
+        await hub.select('alpha')
+      }
+      assert.deepEqual(await hub.externals(), [])
       await a.stop()
       await b.stop()
-      return `alpha's tab still shows alpha, and ${target} went to the default browser`
+      return `a link, window.open, and a redirect to ${target} each selected beta's tab. Alpha's tab stayed on ${address}, and the default browser got nothing`
     }),
   )
 
