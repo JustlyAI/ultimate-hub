@@ -1,12 +1,12 @@
 import { readFileSync, renameSync, writeFileSync } from 'node:fs'
 import type { BaseWindow, Rectangle } from 'electron'
-import { RAIL_WIDTH } from '../shared/tabs.ts'
+import { RAIL_WIDTH, TITLE_BAR } from '../shared/tabs.ts'
 
 const DEFAULT_SIZE = { width: 1400, height: 900 }
 export const MIN_SIZE = { width: 700, height: 400 }
-// The user moves the window by the sidebar's top row, which holds the window buttons. The place counts only if the
-// part of that row that the rail keeps is on a display.
-const DRAG_ROW = { width: RAIL_WIDTH, height: 40 }
+// The user moves the window by the title bar. The place counts only if the part of it that holds the window buttons
+// is on a display.
+const DRAG_ROW = { width: RAIL_WIDTH, height: TITLE_BAR }
 const SAVE_DELAY_MS = 500
 
 function overlap(a: Rectangle, b: Rectangle): { width: number; height: number } {

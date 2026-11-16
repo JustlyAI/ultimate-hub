@@ -52,30 +52,32 @@ body {
   flex: 1;
 }
 
-/* The window has no title bar. This row holds the window buttons, at TRAFFIC_LIGHTS in the main process, and moves the window. */
+/* The window has no system title bar. This row holds the window buttons, at TRAFFIC_LIGHTS in the main process, and moves the window. */
 #brand {
   display: flex;
   align-items: center;
-  gap: 7px;
-  height: 40px;
+  gap: 8px;
+  height: var(--title-bar);
   padding: 0 10px 0 78px;
   app-region: drag;
 }
 
-/* Above the pages, so the whole top edge of the window moves it. */
-#drag-strip {
+/* Above the pages. With the sidebar's top row, it makes one title bar across the window. */
+#title-bar {
   position: fixed;
   top: 0;
   right: 0;
   left: var(--sidebar-width);
-  height: var(--drag-strip);
+  box-sizing: border-box;
+  height: var(--title-bar);
+  border-bottom: 1px solid #000;
   background: #111318;
   app-region: drag;
 }
 
 #brand button,
 body:has(dialog[open]) #brand,
-body:has(dialog[open]) #drag-strip {
+body:has(dialog[open]) #title-bar {
   app-region: no-drag;
 }
 
@@ -83,7 +85,7 @@ body:has(dialog[open]) #drag-strip {
   flex: 1;
   margin: 0;
   overflow: hidden;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -100,7 +102,7 @@ body:has(dialog[open]) #drag-strip {
 #sidebar.rail #brand {
   justify-content: center;
   height: auto;
-  padding: 40px 0 6px;
+  padding: var(--title-bar) 0 6px;
 }
 
 #rail-part {
@@ -368,7 +370,7 @@ button:focus-visible,
 
 .header-buttons {
   display: flex;
-  gap: 2px;
+  gap: 4px;
 }
 
 #search-open,
@@ -389,6 +391,14 @@ button:focus-visible,
   padding: 0;
   border-radius: 4px;
   color: #8b919e;
+}
+
+#search-open,
+#sidebar-toggle,
+#terminal-toggle {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
 }
 
 #add {
@@ -705,6 +715,7 @@ button:focus-visible,
 #message {
   display: flex;
   flex: 1;
+  margin-top: var(--title-bar);
   margin-bottom: var(--panel-space, 0);
   flex-direction: column;
   gap: 10px;
@@ -716,7 +727,7 @@ button:focus-visible,
 
 #name-dialog {
   position: fixed;
-  top: 36px;
+  top: calc(var(--title-bar) - 4px);
   left: 8px;
   box-sizing: border-box;
   width: calc(var(--sidebar-width) - 16px);

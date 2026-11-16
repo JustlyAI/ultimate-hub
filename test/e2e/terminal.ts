@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Page } from 'playwright'
-import { DRAG_STRIP } from '../../src/shared/tabs.ts'
+import { TITLE_BAR } from '../../src/shared/tabs.ts'
 import { isAlive, lsof, sleep, startStub, tempDir, until, type Stub } from '../support/fixtures.ts'
 import { Hub } from '../support/hub.ts'
 import { EVIDENCE, type Check } from '../support/report.ts'
@@ -245,7 +245,7 @@ export async function runTerminalChecks(check: Check) {
       await panelHidden(hub, 'the panel to hide')
       assert.equal(await focusedKind(hub), 'page')
       const hidden = await layout(hub)
-      assert.equal(hidden.page!.height, hidden.window.height - DRAG_STRIP)
+      assert.equal(hidden.page!.height, hidden.window.height - TITLE_BAR)
       assert.equal(hidden.split.hidden, true)
       assert.ok(isAlive(pids.alpha))
       await sleep(1500)
@@ -358,7 +358,7 @@ export async function runTerminalChecks(check: Check) {
       await hub.evaluate(({ BaseWindow }) => BaseWindow.getAllWindows()[0].setContentSize(1000, 400), null)
       const short = await measure('window 1000x400')
       assert.equal(short.page.height, 120)
-      assert.equal(short.terminal.height, 400 - DRAG_STRIP - 6 - 120)
+      assert.equal(short.terminal.height, 400 - TITLE_BAR - 6 - 120)
       await hub.evaluate(({ BaseWindow }) => BaseWindow.getAllWindows()[0].setContentSize(1400, 900), null)
       const back = await measure('window 1400x900')
       assert.equal(back.terminal.height, kept.terminal.height, 'the dragged height returns when the window grows')

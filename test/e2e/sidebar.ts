@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { DRAG_STRIP, RAIL_WIDTH, SIDEBAR_WIDTH } from '../../src/shared/tabs.ts'
+import { RAIL_WIDTH, SIDEBAR_WIDTH, TITLE_BAR } from '../../src/shared/tabs.ts'
 import { sleep, startStub, tempDir, until, type Stub } from '../support/fixtures.ts'
 import { Hub } from '../support/hub.ts'
 import { EVIDENCE, type Check } from '../support/report.ts'
@@ -149,20 +149,21 @@ export async function runSidebarChecks(check: Check) {
           height: brand.getBoundingClientRect().height,
           logoX: Math.round(document.querySelector('#logo')!.getBoundingClientRect().x),
           name: brand.querySelector('h1')!.textContent,
+          nameCut: brand.querySelector('h1')!.scrollWidth > brand.querySelector('h1')!.clientWidth,
           buttons: [...brand.querySelectorAll('button')].map((button) => button.id),
           drag: region(brand),
           buttonDrag: [...new Set([...brand.querySelectorAll('button')].map(region))],
         }
       })
-      assert.deepEqual(lights, { x: 14, y: 13 })
-      assert.deepEqual(row, { height: 40, logoX: 78, name: 'Ultimate Hub', buttons: ['terminal-toggle', 'search-open', 'sidebar-toggle'], drag: 'drag', buttonDrag: ['no-drag'] })
+      assert.deepEqual(lights, { x: 14, y: 16 })
+      assert.deepEqual(row, { height: TITLE_BAR, logoX: 78, name: 'Ultimate Hub', nameCut: false, buttons: ['terminal-toggle', 'search-open', 'sidebar-toggle'], drag: 'drag', buttonDrag: ['no-drag'] })
       return `Window buttons at ${JSON.stringify(lights)}. Top row ${JSON.stringify(row)}`
     })
 
-    await check(section, 'a strip above the page moves the window across the full width, beside the sidebar and the rail, and not while a dialog is open', async () => {
-      const strip = () =>
+    await check(section, 'a title bar above the page, as tall as the top row, moves the window across the full width, beside the sidebar and the rail, and not while a dialog is open', async () => {
+      const bar = () =>
         hub.shell().evaluate(() => {
-          const element = document.querySelector('#drag-strip')!
+          const element = document.querySelector('#title-bar')!
           const { x, y, width, height } = element.getBoundingClientRect()
           return { x, y, width, height, drag: getComputedStyle(element).getPropertyValue('app-region') }
         })
@@ -176,22 +177,22 @@ export async function runSidebarChecks(check: Check) {
       for (const left of [SIDEBAR_WIDTH, RAIL_WIDTH]) {
         if (left === RAIL_WIDTH) await hub.shell().locator('#sidebar-toggle').click()
         await viewsAt(hub, left)
-        const shown = await strip()
-        assert.deepEqual(shown, { x: left, y: 0, width: width - left, height: DRAG_STRIP, drag: 'drag' })
+        const shown = await bar()
+        assert.deepEqual(shown, { x: left, y: 0, width: width - left, height: TITLE_BAR, drag: 'drag' })
         const bounds = await page()
-        assert.equal(bounds.y, DRAG_STRIP, 'the page starts under the strip')
-        forms.push(`strip ${JSON.stringify(shown)}, page ${JSON.stringify(bounds)}`)
+        assert.equal(bounds.y, TITLE_BAR, 'the page starts under the title bar')
+        forms.push(`title bar ${JSON.stringify(shown)}, page ${JSON.stringify(bounds)}`)
       }
-      await shot('sidebar-strip-rail.png')
+      await shot('sidebar-title-bar-rail.png')
       await hub.shell().locator('#sidebar-toggle').click()
       await viewsAt(hub, SIDEBAR_WIDTH)
       await hub.planMenus(['Group'])
       await hub.shell().locator('#add').click()
       await hub.shell().locator('#name-dialog[open]').waitFor()
-      const inDialog = (await strip()).drag
+      const inDialog = (await bar()).drag
       await hub.shell().locator('#name-cancel').click()
       assert.equal(inDialog, 'no-drag')
-      return `${forms.join('. ')}. With the group dialog open, the strip is no-drag.`
+      return `${forms.join('. ')}. With the group dialog open, the title bar is no-drag.`
     })
 
     await check(section, 'a click on the sidebar button leaves a rail with the window buttons and that button under them, moves the page, and saves the form', async () => {
@@ -209,7 +210,7 @@ export async function runSidebarChecks(check: Check) {
       await viewsAt(hub, SIDEBAR_WIDTH)
       assert.equal((await shellState(hub)).lists, true)
       const full = await toggleBox(hub)
-      assert.ok(full.y < 40 && full.x + full.width <= SIDEBAR_WIDTH, 'the button is back in the top row')
+      assert.ok(full.y < TITLE_BAR && full.x + full.width <= SIDEBAR_WIDTH, 'the button is back in the top row')
       return `In the rail the button was at ${JSON.stringify(inRail)}, and back at ${JSON.stringify(full)}. The page went to x=${views.pages[0].x}, width ${views.pages[0].width}. View menu: Show Sidebar. A second click brought the lists back. Screenshot sidebar-2-rail.png`
     })
 
