@@ -1,0 +1,10 @@
+{
+  "isolates": {
+    "worktree": {
+      "setup": ["pnpm install --frozen-lockfile --prefer-offline"]
+    }
+  },
+  "lander": {
+    "checks": ["pnpm -s typecheck", "pnpm -s test"]
+  }
+}
