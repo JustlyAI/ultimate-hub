@@ -7,7 +7,6 @@ User-visible changes to Ultimate Hub, in [Keep a Changelog](https://keepachangel
 ### Added
 
 - Show the Hub logo and a demo video in the README. (#3)
-- Show, pause, close and play Ultimates that run in a Docker sandbox. A sandbox with a legal matter starts again only with `just maite`.
 
 ### Changed
 

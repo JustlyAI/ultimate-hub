@@ -13,14 +13,9 @@ const isPath = (value: unknown): value is string => typeof value === 'string' &&
 
 function parseLifecycle(value: unknown): Lifecycle | null {
   if (value === undefined || value === null) return null
-  const { kind, launcher } = value as { kind?: unknown; launcher?: { node?: unknown; entry?: unknown; port?: unknown; matter?: unknown } }
+  const { kind, launcher } = value as { kind?: unknown; launcher?: { node?: unknown; entry?: unknown } }
   if (kind === 'closing') return { kind }
-  if (kind === 'paused' && isPath(launcher?.node) && isPath(launcher?.entry)) {
-    const { node, entry, port, matter } = launcher
-    if (port !== undefined && !(Number.isInteger(port) && (port as number) > 0 && (port as number) < 65536)) throw new Error(`bad saved port: ${JSON.stringify(value)}`)
-    if (matter !== undefined && typeof matter !== 'string') throw new Error(`bad saved matter: ${JSON.stringify(value)}`)
-    return { kind, launcher: { node, entry, ...(port === undefined ? {} : { port: port as number }), ...(matter === undefined ? {} : { matter }) } }
-  }
+  if (kind === 'paused' && isPath(launcher?.node) && isPath(launcher?.entry)) return { kind, launcher: { node: launcher.node, entry: launcher.entry } }
   throw new Error(`bad saved lifecycle: ${JSON.stringify(value)}`)
 }
 

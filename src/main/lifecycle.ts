@@ -136,18 +136,15 @@ export function createLifecycle({ state, dispatch, nextScan, ask, log, logFolder
   async function anyLauncher(): Promise<Launcher | null> {
     for (const { root } of state().instances) {
       try {
-        // Only the clone: a sandbox's port and matter belong to that project, never to a new one.
-        const { node, entry } = await readLauncher(await verifySupervisor(root, log))
-        return { node, entry }
+        return await readLauncher(await verifySupervisor(root, log))
       } catch (error) {
         log(`add: no launcher from ${root}: ${reason(error)}`)
       }
     }
     for (const { lifecycle } of state().saved.tabs) {
       if (lifecycle?.kind !== 'paused') continue
-      const { node, entry } = lifecycle.launcher
-      const found = await verifyLauncher({ node, entry }).then(() => true, () => false)
-      if (found) return { node, entry }
+      const found = await verifyLauncher(lifecycle.launcher).then(() => true, () => false)
+      if (found) return lifecycle.launcher
     }
     return null
   }

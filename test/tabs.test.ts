@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { parseSaved } from '../src/main/saved.ts'
-import { parseListeners, parseLock, parseStatus, sandboxServes } from '../src/main/ultimate.ts'
+import { parseListeners, parseStatus } from '../src/main/ultimate.ts'
 import {
   activeAfter,
   groupNameRefusal,
@@ -255,32 +255,6 @@ test('a port that passes between projects follows each root, never the port', ()
   ])
   assert.deepEqual(statusList(state), [['Unknown', ['beta']]])
   assert.deepEqual(mainOf(state), notRunning(A, 'Website'))
-})
-
-test('a sandbox lock needs the launcher start time, and keeps its matter', () => {
-  const lock = { pid: 7, port: 4799, project: '/p', start: 'Tue Nov 17 10:53:38 2026', matter: '111111-0001' }
-  assert.deepEqual(parseLock(JSON.stringify(lock), true), { pid: 7, port: 4799, project: '/p', sandbox: { start: lock.start, matter: '111111-0001' } })
-  assert.equal(parseLock(JSON.stringify({ ...lock, matter: null }), true).sandbox?.matter, null)
-  assert.throws(() => parseLock(JSON.stringify({ ...lock, start: undefined }), true), /start/)
-  assert.equal(parseLock(JSON.stringify(lock)).sandbox, undefined)
-})
-
-test('sbx proves a sandbox only when a running one of the project publishes the port', () => {
-  const sandbox = { status: 'running', ports: [{ host_port: 4799, sandbox_port: 14790 }], workspaces: ['/p', '/home'] }
-  const list = (...sandboxes: object[]) => JSON.stringify({ sandboxes })
-  assert.equal(sandboxServes(list(sandbox), 4799, '/p'), true)
-  assert.equal(sandboxServes(list({ ...sandbox, status: 'stopped' }), 4799, '/p'), false)
-  assert.equal(sandboxServes(list(sandbox), 4800, '/p'), false)
-  assert.equal(sandboxServes(list({ ...sandbox, workspaces: ['/home', '/p'] }), 4799, '/p'), false)
-  assert.equal(sandboxServes(list({ status: 'running' }), 4799, '/p'), false)
-})
-
-test('a paused sandbox keeps its port and matter in tabs.json, and a bad one is refused', () => {
-  const tab = (launcher: object) => ({ groups: [], tabs: [{ root: '/p', name: null, groupId: null, lifecycle: { kind: 'paused', launcher } }] })
-  const launcher = { node: '/n/node', entry: '/u/bin/ultimate.ts', port: 4799, matter: '111111-0001' }
-  assert.deepEqual(parseSaved(tab(launcher)).tabs[0].lifecycle, { kind: 'paused', launcher })
-  assert.deepEqual(parseSaved(tab({ node: '/n/node', entry: '/u/bin/ultimate.ts' })).tabs[0].lifecycle, { kind: 'paused', launcher: { node: '/n/node', entry: '/u/bin/ultimate.ts' } })
-  assert.throws(() => parseSaved(tab({ ...launcher, port: 'x' })), /port/)
 })
 
 test('lsof output gives the ports of each process', () => {
