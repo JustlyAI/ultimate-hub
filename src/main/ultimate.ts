@@ -4,7 +4,7 @@ import { closeSync, constants, existsSync, openSync, realpathSync } from 'node:f
 import { access, readdir, readFile, realpath, stat } from 'node:fs/promises'
 import { homedir, userInfo } from 'node:os'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
-import type { Command, Instance, InstanceStatus, Launcher } from '../shared/tabs'
+import { type Command, type Instance, type InstanceStatus, type Launcher, isCommand } from '../shared/tabs.ts'
 
 // All knowledge of Ultimate's files lives here, because their format can change without notice.
 
@@ -17,6 +17,11 @@ const WRITE_TIMEOUT_MS = 30000
 type Log = (line: string) => void
 type Listeners = Map<number, Set<number>>
 type Lock = { pid: number; port: number; project: string }
+/**
+ * The host lock of an Ultimate that runs in a sandbox, written by the host process that started the sandbox. Its format
+ * is Hub's contract in docs/sandbox.md, so any sandbox can meet it. `restart` is null when Hub must not start it again.
+ */
+type SandboxLock = Lock & { start: string; restart: string[] | null }
 
 function parseLock(text: string): Lock {
   const { pid, port, project } = JSON.parse(text)
@@ -26,10 +31,21 @@ function parseLock(text: string): Lock {
   return { pid, port, project }
 }
 
+/** `ps` pads a day of one digit with a second space. A launcher in a shell can also keep it, so both sides collapse it. */
+const oneSpace = (text: string) => text.trim().split(/\s+/).join(' ')
+
+export function parseSandboxLock(text: string): SandboxLock {
+  const lock = parseLock(text)
+  const { start, restart } = JSON.parse(text)
+  if (typeof start !== 'string' || start.trim() === '') throw new Error('sandbox lock has no start time')
+  if (restart !== undefined && !isCommand(restart)) throw new Error('sandbox lock has no valid restart command')
+  return { ...lock, start: oneSpace(start), restart: restart ?? null }
+}
+
 /** A missing lock is normal. A bad lock is logged. Both mean that the project is not running. */
-async function readLock(path: string, log: Log): Promise<Lock | null> {
+async function readLock<T>(path: string, parse: (text: string) => T, log: Log): Promise<T | null> {
   try {
-    return parseLock(await readFile(path, 'utf8'))
+    return parse(await readFile(path, 'utf8'))
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') log(`${path}: ${String(error)}`)
     return null
@@ -93,20 +109,52 @@ export async function findProject(chosen: string): Promise<{ root: string; ran: 
   return { root, ran: false }
 }
 
-async function readLocks(log: Log): Promise<Lock[]> {
+const SANDBOX_LOCK = '.sandbox.lock'
+
+async function readLocks(log: Log): Promise<{ locks: Lock[]; sandboxes: SandboxLock[] }> {
   const directory = projectsFolder()
   const entries = await readdir(directory, { withFileTypes: true }).catch(() => [])
-  const locks = await Promise.all(
-    entries.filter((entry) => entry.isDirectory()).map(({ name }) => readLock(join(directory, name, 'ultimate.lock'), log)),
-  )
-  return locks.filter((lock) => lock !== null)
+  const [locks, sandboxes] = await Promise.all([
+    Promise.all(entries.filter((entry) => entry.isDirectory()).map(({ name }) => readLock(join(directory, name, 'ultimate.lock'), parseLock, log))),
+    Promise.all(
+      entries.filter((entry) => entry.isFile() && entry.name.endsWith(SANDBOX_LOCK)).map(({ name }) => readLock(join(directory, name), parseSandboxLock, log)),
+    ),
+  ])
+  return { locks: locks.filter((lock) => lock !== null), sandboxes: sandboxes.filter((lock) => lock !== null) }
+}
+
+/** Sandbox locks, by their text, where an Ultimate answered. The same launcher with the same start is the same launch. */
+const answeredSandboxes = new Set<string>()
+
+/**
+ * A sandbox's port can belong to any process, often one of another user that lsof cannot see, so the proof does not use
+ * it. The launcher must run with its start time and our user, and an Ultimate must answer on the port once for each
+ * launch. After that, the contract makes the launcher exit when its sandbox stops.
+ */
+async function sandboxRuns(lock: SandboxLock): Promise<boolean> {
+  const key = JSON.stringify(lock)
+  const found = await processOf(lock.pid).catch(() => null)
+  if (found?.start !== lock.start || found.uid !== process.getuid!()) {
+    answeredSandboxes.delete(key)
+    return false
+  }
+  if (answeredSandboxes.has(key)) return true
+  if (!(await statusAnswers(lock.port))) return false
+  answeredSandboxes.add(key)
+  return true
 }
 
 async function provenInstances(listeners: Listeners, log: Log): Promise<Instance[]> {
+  const { locks, sandboxes } = await readLocks(log)
   const instances = new Map<string, Instance>()
-  for (const lock of await readLocks(log))
+  for (const lock of locks)
     // While a project starts, its lock can hold a port that another project owns.
     if (listeners.get(lock.pid)?.has(lock.port)) instances.set(lock.project, { root: lock.project, port: lock.port })
+  // A local Ultimate that owns its port is the stronger proof, so it wins its project and its port.
+  const ports = new Set([...instances.values()].map(({ port }) => port))
+  const candidates = sandboxes.filter((lock) => !instances.has(lock.project) && !ports.has(lock.port))
+  const running = await Promise.all(candidates.map(sandboxRuns))
+  candidates.forEach((lock, at) => running[at] && instances.set(lock.project, { root: lock.project, port: lock.port }))
   return [...instances.values()].sort((a, b) => a.root.localeCompare(b.root))
 }
 
@@ -379,8 +427,11 @@ const PS = '/bin/ps'
 const LSOF = '/usr/sbin/lsof'
 const LOGIN_SHELL_TIMEOUT_MS = 5000
 
-/** One supervisor, proven by its lock, its socket, its user, and its start time. Never saved. */
-export type Supervisor = { pid: number; start: string; port: number }
+/**
+ * One supervisor, proven by its lock, its socket, its user, and its start time. Never saved. For a sandbox, the pid is
+ * the launcher of its lock, which stops the sandbox on SIGTERM, and `restart` is the lock's command to start it again.
+ */
+export type Supervisor = { pid: number; start: string; port: number; sandbox?: { restart: string[] | null } }
 
 type Ran = { stdout: string; error: (Error & { code?: unknown }) | null }
 
@@ -410,15 +461,39 @@ async function fdPaths(pid: number, fd: string): Promise<string[]> {
   return output.split('\n').filter((line) => line.startsWith('n')).map((line) => line.slice(1))
 }
 
-export async function verifySupervisor(root: string, log: Log): Promise<Supervisor> {
-  const lock = (await readLocks(log)).find(({ project }) => project === root)
-  if (!lock) throw new Error('Ultimate is not running for this project.')
+async function verifyLocal(lock: Lock): Promise<Supervisor> {
   const listening = parseListeners(await query(LSOF, ['-nP', '-a', '-p', String(lock.pid), '-iTCP', '-sTCP:LISTEN', '-Fpn']))
   if (!listening.get(lock.pid)?.has(lock.port)) throw new Error('The process in the lock does not own its port.')
   const found = await processOf(lock.pid)
   if (!found) throw new Error('The process in the lock is gone.')
   if (found.uid !== process.getuid!()) throw new Error('The process belongs to another user.')
   return { pid: lock.pid, start: found.start, port: lock.port }
+}
+
+async function verifySandbox(lock: SandboxLock): Promise<Supervisor> {
+  const found = await processOf(lock.pid)
+  if (found?.start !== lock.start) throw new Error('The launcher in the sandbox lock is gone.')
+  if (found.uid !== process.getuid!()) throw new Error('The process belongs to another user.')
+  if (!(await statusAnswers(lock.port))) throw new Error('No Ultimate answers on the port in the sandbox lock.')
+  return { pid: lock.pid, start: found.start, port: lock.port, sandbox: { restart: lock.restart } }
+}
+
+/**
+ * A sandbox can share Ultimate's project folder, so its project can also have an `ultimate.lock` with a pid from inside
+ * the sandbox. That lock fails the local proof, and the sandbox lock is then the one to prove, as in a scan.
+ */
+export async function verifySupervisor(root: string, log: Log): Promise<Supervisor> {
+  const { locks, sandboxes } = await readLocks(log)
+  const lock = locks.find(({ project }) => project === root)
+  const sandbox = sandboxes.find(({ project }) => project === root)
+  if (lock)
+    try {
+      return await verifyLocal(lock)
+    } catch (error) {
+      if (!sandbox) throw error
+    }
+  if (!sandbox) throw new Error('Ultimate is not running for this project.')
+  return verifySandbox(sandbox)
 }
 
 /**
@@ -437,6 +512,13 @@ export function entryOf(args: string, cwd: string, exists: (path: string) => boo
 }
 
 export async function verifyLauncher(launcher: Launcher): Promise<void> {
+  if ('command' in launcher) {
+    const [program] = launcher.command
+    await access(program, constants.X_OK).catch(() => {
+      throw new Error(`The sandbox's restart command is not available at ${program}.`)
+    })
+    return
+  }
   try {
     await access(launcher.node, constants.X_OK)
   } catch {
@@ -450,8 +532,18 @@ export async function verifyLauncher(launcher: Launcher): Promise<void> {
   }
 }
 
-/** The Node binary that runs the supervisor, and its `bin/ultimate.ts`. `ps -o comm=` gives only `node`. */
+/**
+ * For a local Ultimate, the Node binary that runs the supervisor, and its `bin/ultimate.ts`. `ps -o comm=` gives only
+ * `node`. For a sandbox, the restart command of its lock.
+ */
 export async function readLauncher(target: Supervisor): Promise<Launcher> {
+  if (target.sandbox) {
+    const { restart } = target.sandbox
+    if (!restart) throw new Error('This sandbox gives Hub no command to start it again, so Hub can close it but not pause it.')
+    const launcher = { command: restart }
+    await verifyLauncher(launcher)
+    return launcher
+  }
   const [node] = await fdPaths(target.pid, 'txt')
   const [cwd] = await fdPaths(target.pid, 'cwd')
   const args = (await query(PS, ['-o', 'args=', '-p', String(target.pid)])).trim()
@@ -504,10 +596,12 @@ function readLoginPath(log: Log): Promise<string | null> {
 /** Detached, with no pipe to Hub, so that it outlives Hub. Its stderr goes to a file, never a pipe. */
 export async function startSupervisor(launcher: Launcher, root: string, stderrPath: string, log: Log): Promise<ChildProcess> {
   const { ULTIMATE_HOME: _home, ULTIMATE_PORT: _port, ...env } = process.env
-  env.PATH = launchPath(await readLoginPath(log), dirname(launcher.node), process.env.PATH)
+  const login = await readLoginPath(log)
+  env.PATH = 'command' in launcher ? (login ?? process.env.PATH) : launchPath(login, dirname(launcher.node), process.env.PATH)
+  const [program, ...args] = 'command' in launcher ? launcher.command : [launcher.node, launcher.entry, root, '--no-open']
   const stderr = openSync(stderrPath, 'w')
   try {
-    const child = spawn(launcher.node, [launcher.entry, root, '--no-open'], { cwd: root, detached: true, stdio: ['ignore', 'ignore', stderr], env })
+    const child = spawn(program, args, { cwd: root, detached: true, stdio: ['ignore', 'ignore', stderr], env })
     child.unref()
     return child
   } finally {

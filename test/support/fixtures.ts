@@ -60,6 +60,16 @@ export function writeLock(home: string, root: string, lock: { pid: number; port:
   writeFileSync(join(folder, 'ultimate.lock'), JSON.stringify({ project: root, ...lock }))
 }
 
+/** A sandbox launcher's host lock, as docs/sandbox.md defines it. */
+export function writeSandboxLock(home: string, name: string, lock: { pid: number; start: string; port: number; project: string; restart?: string[] }) {
+  const folder = join(home, '.ultimate', 'projects')
+  mkdirSync(folder, { recursive: true })
+  writeFileSync(join(folder, `${name}.sandbox.lock`), JSON.stringify(lock))
+}
+
+/** A start time as a sandbox launcher writes it: `LC_ALL=C ps -o lstart= -p <pid>`. */
+export const startOf = (pid: number) => execFileSync('/bin/ps', ['-o', 'lstart=', '-p', String(pid)], { env: { LC_ALL: 'C' }, encoding: 'utf8' }).trim()
+
 export type Stub = { child: ChildProcess; port: number; root: string; stop(signal?: NodeJS.Signals): Promise<void> }
 
 function stopper(child: ChildProcess) {

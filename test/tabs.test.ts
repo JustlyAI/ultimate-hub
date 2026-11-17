@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { parseSaved } from '../src/main/saved.ts'
-import { parseListeners, parseStatus } from '../src/main/ultimate.ts'
+import { parseListeners, parseSandboxLock, parseStatus } from '../src/main/ultimate.ts'
 import {
   activeAfter,
   groupNameRefusal,
@@ -255,6 +255,21 @@ test('a port that passes between projects follows each root, never the port', ()
   ])
   assert.deepEqual(statusList(state), [['Unknown', ['beta']]])
   assert.deepEqual(mainOf(state), notRunning(A, 'Website'))
+})
+
+test('a sandbox lock needs a start time, and its restart is an absolute program with arguments', () => {
+  const lock = { pid: 7, start: 'Tue Nov  3 10:53:38 2026', port: 4799, project: '/p', restart: ['/usr/local/bin/box', 'up', '/p'] }
+  assert.deepEqual(parseSandboxLock(JSON.stringify(lock)), { ...lock, start: 'Tue Nov 3 10:53:38 2026' })
+  assert.equal(parseSandboxLock(JSON.stringify({ ...lock, restart: undefined })).restart, null)
+  for (const bad of [{ start: undefined }, { start: ' ' }, { restart: [] }, { restart: ['box', 'up'] }, { restart: ['/box', 1] }, { port: 0 }])
+    assert.throws(() => parseSandboxLock(JSON.stringify({ ...lock, ...bad })), `should reject ${JSON.stringify(bad)}`)
+})
+
+test('a paused sandbox keeps its restart command in tabs.json, and a relative one is refused', () => {
+  const tabs = (launcher: object) => ({ groups: [], tabs: [{ root: '/p', name: null, groupId: null, lifecycle: { kind: 'paused', launcher } }] })
+  const launcher = { command: ['/usr/local/bin/box', 'up', '/p'] }
+  assert.deepEqual(parseSaved(tabs(launcher)).tabs[0].lifecycle, { kind: 'paused', launcher })
+  assert.throws(() => parseSaved(tabs({ command: ['box', 'up'] })), /lifecycle/)
 })
 
 test('lsof output gives the ports of each process', () => {

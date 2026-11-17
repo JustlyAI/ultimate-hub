@@ -7,6 +7,7 @@ User-visible changes to Ultimate Hub, in [Keep a Changelog](https://keepachangel
 ### Added
 
 - Show the Hub logo and a demo video in the README. (#3)
+- Show, pause, start, and close an Ultimate that runs in a sandbox, through a lock that its launcher writes. See `docs/sandbox.md`.
 
 ### Changed
 

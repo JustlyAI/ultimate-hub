@@ -93,7 +93,7 @@ function loginProfile(home: string, extra = ''): { marker: string; openLog: stri
 
 const finderEnv = (home: string, agentDir: string, extra: Record<string, string> = {}) => ({ HOME: home, PATH: FINDER_PATH, PI_CODING_AGENT_DIR: agentDir, ...extra })
 
-const lifeOf = (hub: Hub, label: string): Promise<Life> =>
+export const lifeOf = (hub: Hub, label: string): Promise<Life> =>
   hub.topRow(label).evaluate((row) => {
     const button = row.querySelector<HTMLButtonElement>('.life')
     return button ? { name: button.ariaLabel!, kind: [...button.classList].find((name) => name !== 'life')!, disabled: button.disabled } : null
@@ -116,13 +116,13 @@ function recordLife(hub: Hub, root: string): Promise<void> {
 
 const lifeSeen = (hub: Hub) => hub.shell().evaluate(() => (window as unknown as { lifeSeen: string[] }).lifeSeen)
 
-const savedLifecycle = (hub: Hub, root: string) => hub.savedTabs().find((tab) => tab.root === root)?.lifecycle
+export const savedLifecycle = (hub: Hub, root: string) => hub.savedTabs().find((tab) => tab.root === root)?.lifecycle
 
-async function waitForLife(hub: Hub, label: string, name: string, timeout = 60000): Promise<void> {
+export async function waitForLife(hub: Hub, label: string, name: string, timeout = 60000): Promise<void> {
   await until(`${label} control named ${name}`, async () => (await lifeOf(hub, label).catch(() => null))?.name === name, timeout)
 }
 
-async function sheetsAfter(hub: Hub, count: number) {
+export async function sheetsAfter(hub: Hub, count: number) {
   return until(`sheet ${count + 1}`, async () => {
     const shown = await hub.sheetsShown()
     return shown.length > count ? shown : null
@@ -130,7 +130,7 @@ async function sheetsAfter(hub: Hub, count: number) {
 }
 
 /** Closes through the row's trailing menu (native menu stubbed). */
-async function chooseClose(hub: Hub, label: string) {
+export async function chooseClose(hub: Hub, label: string) {
   await hub.planMenus(['Close Ultimate…'])
   await hub.topRow(label).locator('.row-menu').click()
 }

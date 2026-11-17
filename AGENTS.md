@@ -12,7 +12,7 @@ pnpm dist        # build the app at dist.noindex/mac-arm64/Ultimate Hub.app
 pnpm typecheck
 pnpm test        # pure tab rules, and the `uh` CLI against a fake Ultimate
 pnpm -s verify:uh  # drive `uh` against one real Ultimate, with no build of the app
-pnpm -s verify   # drive the packaged app, or add: rules groups launch real scale search zoom terminal lifecycle window sidebar
+pnpm -s verify   # drive the packaged app, or add: rules groups launch real scale search zoom terminal lifecycle sandbox window sidebar
 pnpm -s demo     # record the README demo in docs/demo from the packaged app and four real Ultimates
 ```
 
@@ -25,6 +25,7 @@ pnpm -s demo     # record the README demo in docs/demo from the packaged app and
 - `src/shared/tabs.ts`: the data shape and the pure tab rules. All tab behavior belongs here.
 - `src/main/ultimate.ts`: the only code that reads Ultimate's files, runs `lsof` or `ps`, calls its HTTP API, signals or starts an Ultimate supervisor, or reads the login shell's `PATH`. The app and `uh` both use it.
 - `bin/uh.ts`, `src/cli/uh.ts`, and `src/cli/ledger.ts`: the `uh` CLI for scripts and automation. Node runs it directly, with no Electron and no build. `uh.ts` has the command table and the rule for `state` and `answer`. `ledger.ts` makes `new` and `send` idempotent. Its contract is `docs/cli-contract.md`.
+- `docs/sandbox.md`: the lock that a sandbox launcher writes so that Hub can show and control its Ultimate. Hub reads and proves it in `src/main/ultimate.ts`.
 - `src/main/lifecycle.ts`: runs the steps of one Pause, Play, Close, or add from **+** > **Ultimate**. The rules for them are in `src/shared/tabs.ts`.
 - `src/main/saved.ts`: reads and writes `tabs.json`, with each tab's paused or closing record.
 - `src/main/pages.ts`: makes the page views match the state.

@@ -1,4 +1,4 @@
-// Drives the real packaged app. Run with Node 26: node scripts/verify.ts [rules] [groups] [real] [scale] [launch] [zoom] [search] [terminal] [lifecycle] [window] [sidebar] [add]
+// Drives the real packaged app. Run with Node 26: node scripts/verify.ts [rules] [groups] [real] [scale] [launch] [zoom] [search] [terminal] [lifecycle] [sandbox] [window] [sidebar] [add]
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs'
@@ -7,6 +7,7 @@ import { join } from 'node:path'
 import { runLaunchChecks } from '../test/e2e/launch.ts'
 import { runLifecycleChecks } from '../test/e2e/lifecycle.ts'
 import { runRealChecks } from '../test/e2e/real.ts'
+import { runSandboxChecks } from '../test/e2e/sandbox.ts'
 import { runAddChecks } from '../test/e2e/add.ts'
 import { runGroupChecks } from '../test/e2e/groups.ts'
 import { runRuleChecks } from '../test/e2e/rules.ts'
@@ -57,6 +58,7 @@ try {
   }
   if (wants('search')) await runSearchChecks(report.check)
   if (wants('lifecycle')) await runLifecycleChecks(report.check)
+  if (wants('sandbox')) await runSandboxChecks(report.check)
   if (wants('add')) await runAddChecks(report.check)
 } finally {
   await report.check('safety', 'the Ultimate clone stays unmodified', () => {

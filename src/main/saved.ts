@@ -1,6 +1,6 @@
 import { readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
-import { type Lifecycle, type Saved, type SavedTab, type SidebarForm, type UserGroup, ZOOM_STEPS } from '../shared/tabs.ts'
+import { isCommand, type Lifecycle,type Saved, type SavedTab, type SidebarForm, type UserGroup, ZOOM_STEPS } from '../shared/tabs.ts'
 
 function parseGroup(value: unknown): UserGroup {
   const { id, name, collapsed } = value as UserGroup
@@ -13,9 +13,10 @@ const isPath = (value: unknown): value is string => typeof value === 'string' &&
 
 function parseLifecycle(value: unknown): Lifecycle | null {
   if (value === undefined || value === null) return null
-  const { kind, launcher } = value as { kind?: unknown; launcher?: { node?: unknown; entry?: unknown } }
+  const { kind, launcher } = value as { kind?: unknown; launcher?: { node?: unknown; entry?: unknown; command?: unknown } }
   if (kind === 'closing') return { kind }
   if (kind === 'paused' && isPath(launcher?.node) && isPath(launcher?.entry)) return { kind, launcher: { node: launcher.node, entry: launcher.entry } }
+  if (kind === 'paused' && isCommand(launcher?.command)) return { kind, launcher: { command: launcher.command } }
   throw new Error(`bad saved lifecycle: ${JSON.stringify(value)}`)
 }
 

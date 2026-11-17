@@ -132,17 +132,21 @@ export function createLifecycle({ state, dispatch, nextScan, ask, log, logFolder
     void (action === 'play' ? play(root, id) : stop(root, id, action))
   }
 
-  /** The launcher of a running Ultimate, else of a paused tab. Hub has no other way to know where Ultimate is installed. */
+  /**
+   * The launcher of a running local Ultimate, else of a paused one. Hub has no other way to know where Ultimate is
+   * installed. A sandbox's restart command starts only that sandbox, so it never starts a new project.
+   */
   async function anyLauncher(): Promise<Launcher | null> {
     for (const { root } of state().instances) {
       try {
-        return await readLauncher(await verifySupervisor(root, log))
+        const target = await verifySupervisor(root, log)
+        if (!target.sandbox) return await readLauncher(target)
       } catch (error) {
         log(`add: no launcher from ${root}: ${reason(error)}`)
       }
     }
     for (const { lifecycle } of state().saved.tabs) {
-      if (lifecycle?.kind !== 'paused') continue
+      if (lifecycle?.kind !== 'paused' || 'command' in lifecycle.launcher) continue
       const found = await verifyLauncher(lifecycle.launcher).then(() => true, () => false)
       if (found) return lifecycle.launcher
     }
