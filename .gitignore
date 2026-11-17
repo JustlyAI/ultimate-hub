@@ -1,7 +1,7 @@
 .superpowers/
 node_modules/
 out/
-dist/
+dist.noindex/
 .claude/worktrees/
 .claude/settings.local.json
 .claude/scheduled_tasks.lock

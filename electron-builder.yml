@@ -5,7 +5,7 @@ files:
   - LICENSE
   - THIRD_PARTY_LICENSES.md
 directories:
-  output: dist
+  output: dist.noindex
 mac:
   target:
     - target: dir
