@@ -101,7 +101,7 @@ Keys apply on **this machine only** (where `uh` runs).
 
 ## Known limits
 
-- Only Ultimates under `~/.ultimate/projects/` with a proven lock and listen port are visible (same rules as the Hub app).
+- Only Ultimates under `~/.ultimate/projects/` with a proven lock and listen port are visible (same rules as the Hub app). A sandboxed Ultimate is proven by its host `<home>.sandbox.lock` and `sbx ls`.
 - Discovery uses macOS `lsof` and `ps`. On other systems, `list` and any command that needs a running instance may return `internal` until port detection works there.
 - `uh` does not start, pause, or stop Ultimate. Start the instance yourself.
 - `working` reflects the conversation's own task, not every subagent in the project.

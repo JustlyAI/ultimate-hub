@@ -26,8 +26,11 @@ export type UserGroup = {
   collapsed: boolean
 }
 
-/** How to start Ultimate again. Both paths are absolute and real. `entry` is `<clone>/bin/ultimate.ts`. */
-export type Launcher = { node: string; entry: string }
+/**
+ * How to start Ultimate again. Both paths are absolute and real. `entry` is `<clone>/bin/ultimate.ts`. A sandboxed
+ * Ultimate needs its fixed `port` again. One that runs a legal `matter` is started only by `just maite`.
+ */
+export type Launcher = { node: string; entry: string; port?: number; matter?: string }
 
 /** Saved before any signal. It records a request, never permission to signal. */
 export type Lifecycle = { kind: 'paused'; launcher: Launcher } | { kind: 'closing' }
