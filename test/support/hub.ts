@@ -5,7 +5,7 @@ import { _electron, type ElectronApplication, type Page } from 'playwright'
 import { cleanEnv, sleep, until } from './fixtures.ts'
 
 export const APP =
-  process.env.HUB_APP ?? join(import.meta.dirname, '../../dist/mac-arm64/Ultimate Hub.app/Contents/MacOS/Ultimate Hub')
+  process.env.HUB_APP ?? join(import.meta.dirname, '../../dist.noindex/mac-arm64/Ultimate Hub.app/Contents/MacOS/Ultimate Hub')
 
 export type TabRow = { label: string; port: number | null; selected: boolean; dimmed: boolean; root: string }
 /** A terminal view in the main process. `origin` is its page's `performance.timeOrigin`, which tells the views apart. */

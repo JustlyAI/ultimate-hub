@@ -8,7 +8,7 @@ Use Node 26 and pnpm 11.8. On a machine where Node 26 is not the default, prefix
 
 ```bash
 pnpm install --frozen-lockfile
-pnpm dist        # build the app at dist/mac-arm64/Ultimate Hub.app
+pnpm dist        # build the app at dist.noindex/mac-arm64/Ultimate Hub.app
 pnpm typecheck
 pnpm test        # pure tab rules, and the `uh` CLI against a fake Ultimate
 pnpm -s verify:uh  # drive `uh` against one real Ultimate, with no build of the app

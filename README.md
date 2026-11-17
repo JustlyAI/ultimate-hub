@@ -19,10 +19,13 @@ git clone https://github.com/JustlyAI/ultimate-hub.git
 cd ultimate-hub
 pnpm install --frozen-lockfile
 pnpm dist
-open "dist/mac-arm64/Ultimate Hub.app"
+ditto "dist.noindex/mac-arm64/Ultimate Hub.app" "/Applications/Ultimate Hub.app"
+open "/Applications/Ultimate Hub.app"
 ```
 
-Build the app on the Mac that uses it. The build is not signed, so macOS can block a copy from another machine.
+Build the app on the Mac that uses it. The build is not signed, so macOS can block a copy from another machine. Spotlight does not index the build folder, so it shows only the copy in `/Applications`.
+
+To update, run `git pull` and `pnpm dist`, quit the app, and run the `ditto` and `open` lines again. If you close the app, your Ultimates continue to run, but the shells in its terminal panel stop.
 
 ## What it does
 
