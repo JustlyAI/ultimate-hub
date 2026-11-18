@@ -15,6 +15,8 @@ const NO_LAUNCHER = 'Hub starts Ultimate the way a running or paused one was sta
 
 const PAUSE_WARNING =
   'This stops the server and interrupts active work. When it starts again, Ultimate continues interrupted work from its last checkpoint.'
+// A sandbox's restart command can start a new sandbox, so Hub promises no checkpoint for it.
+const SANDBOX_PAUSE_WARNING = "This stops the sandbox and interrupts active work. Start runs the sandbox's restart command again."
 const CLOSE_WARNING =
   'This stops the server and removes it from Hub. Active work can be interrupted. Project files and saved conversations are not deleted.'
 
@@ -65,7 +67,7 @@ export function createLifecycle({ state, dispatch, nextScan, ask, log, logFolder
       const label = labelOf(root)
       const sure = await ask(
         action === 'pause'
-          ? { icon: 'pause', title: `Pause ${label}?`, text: PAUSE_WARNING, path: root, action: 'Pause server' }
+          ? { icon: 'pause', title: `Pause ${label}?`, text: target.sandbox ? SANDBOX_PAUSE_WARNING : PAUSE_WARNING, path: root, action: 'Pause server' }
           : { icon: 'close', title: `Close ${label}?`, text: CLOSE_WARNING, path: root, action: 'Close Ultimate' },
       )
       if (!sure) return void dispatch({ type: 'lifecycle-failed', root, id, error: null, before: true })
@@ -132,17 +134,21 @@ export function createLifecycle({ state, dispatch, nextScan, ask, log, logFolder
     void (action === 'play' ? play(root, id) : stop(root, id, action))
   }
 
-  /** The launcher of a running Ultimate, else of a paused tab. Hub has no other way to know where Ultimate is installed. */
+  /**
+   * The launcher of a running local Ultimate, else of a paused one. Hub has no other way to know where Ultimate is
+   * installed. A sandbox's restart command starts only that sandbox, so it never starts a new project.
+   */
   async function anyLauncher(): Promise<Launcher | null> {
     for (const { root } of state().instances) {
       try {
-        return await readLauncher(await verifySupervisor(root, log))
+        const target = await verifySupervisor(root, log)
+        if (!target.sandbox) return await readLauncher(target)
       } catch (error) {
         log(`add: no launcher from ${root}: ${reason(error)}`)
       }
     }
     for (const { lifecycle } of state().saved.tabs) {
-      if (lifecycle?.kind !== 'paused') continue
+      if (lifecycle?.kind !== 'paused' || 'command' in lifecycle.launcher) continue
       const found = await verifyLauncher(lifecycle.launcher).then(() => true, () => false)
       if (found) return lifecycle.launcher
     }

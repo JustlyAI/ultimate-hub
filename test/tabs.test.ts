@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { parseSaved } from '../src/main/saved.ts'
-import { parseListeners, parseStatus } from '../src/main/ultimate.ts'
+import { chooseSandboxes, parseListeners, parseSandboxLock, parseStatus } from '../src/main/ultimate.ts'
 import {
   activeAfter,
   groupNameRefusal,
@@ -255,6 +255,37 @@ test('a port that passes between projects follows each root, never the port', ()
   ])
   assert.deepEqual(statusList(state), [['Unknown', ['beta']]])
   assert.deepEqual(mainOf(state), notRunning(A, 'Website'))
+})
+
+test('a sandbox lock needs a start time, and its restart is an absolute program with arguments', () => {
+  const lock = { pid: 7, start: 'Tue Nov  3 10:53:38 2026', port: 4799, project: '/p', restart: ['/usr/local/bin/box', 'up', '/p'] }
+  assert.deepEqual(parseSandboxLock(JSON.stringify(lock)), { ...lock, start: 'Tue Nov 3 10:53:38 2026' })
+  const { restart: _restart, ...withoutRestart } = lock
+  assert.equal(parseSandboxLock(JSON.stringify(withoutRestart)).restart, null)
+  assert.equal(parseSandboxLock(JSON.stringify({ ...lock, restart: null })).restart, null)
+  for (const bad of [{ start: undefined }, { start: ' ' }, { restart: [] }, { restart: ['box', 'up'] }, { restart: ['/box', 1] }, { port: 0 }])
+    assert.throws(() => parseSandboxLock(JSON.stringify({ ...lock, ...bad })), `should reject ${JSON.stringify(bad)}`)
+})
+
+test('a local Ultimate wins its project and port, then the newest sandbox launch wins its project and port', () => {
+  const box = (pid: number, start: string, port: number, project: string) => ({ pid, start, port, project, restart: null })
+  const old = box(10, 'Tue Nov 17 10:00:00 2026', 5001, '/a')
+  const newer = box(11, 'Tue Nov 17 11:00:00 2026', 5002, '/a')
+  const sameSecond = box(12, 'Tue Nov 17 11:00:00 2026', 5003, '/a')
+  const portThief = box(13, 'Tue Nov 17 09:00:00 2026', 5003, '/b')
+  const onLocalPort = box(14, 'Tue Nov 17 12:00:00 2026', 4747, '/c')
+  const onLocalProject = box(15, 'Tue Nov 17 12:00:00 2026', 5004, '/local')
+  const local = [{ pid: 1, port: 4747, project: '/local' }]
+  const chosen = chooseSandboxes(local, [old, newer, sameSecond, portThief, onLocalPort, onLocalProject])
+  assert.deepEqual([...chosen.entries()], [['/a', sameSecond]])
+  assert.deepEqual([...chooseSandboxes([], [newer, old]).values()], [newer], 'the order of the files does not matter')
+})
+
+test('a paused sandbox keeps its restart command in tabs.json, and a relative one is refused', () => {
+  const tabs = (launcher: object) => ({ groups: [], tabs: [{ root: '/p', name: null, groupId: null, lifecycle: { kind: 'paused', launcher } }] })
+  const launcher = { command: ['/usr/local/bin/box', 'up', '/p'] }
+  assert.deepEqual(parseSaved(tabs(launcher)).tabs[0].lifecycle, { kind: 'paused', launcher })
+  assert.throws(() => parseSaved(tabs({ command: ['box', 'up'] })), /lifecycle/)
 })
 
 test('lsof output gives the ports of each process', () => {

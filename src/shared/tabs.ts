@@ -26,8 +26,15 @@ export type UserGroup = {
   collapsed: boolean
 }
 
-/** How to start Ultimate again. Both paths are absolute and real. `entry` is `<clone>/bin/ultimate.ts`. */
-export type Launcher = { node: string; entry: string }
+/**
+ * How to start Ultimate again. For a local Ultimate, both paths are absolute and real, and `entry` is
+ * `<clone>/bin/ultimate.ts`. For a sandbox, `command` is the `restart` of its lock (docs/sandbox.md).
+ */
+export type Launcher = { node: string; entry: string } | { command: string[] }
+
+/** A command that Hub can run with no shell: an absolute program, then its arguments. */
+export const isCommand = (value: unknown): value is string[] =>
+  Array.isArray(value) && value.every((part) => typeof part === 'string') && typeof value[0] === 'string' && value[0].startsWith('/')
 
 /** Saved before any signal. It records a request, never permission to signal. */
 export type Lifecycle = { kind: 'paused'; launcher: Launcher } | { kind: 'closing' }

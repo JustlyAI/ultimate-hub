@@ -14,7 +14,7 @@ const ENTRY = realpathSync(join(CLONE, 'bin/ultimate.ts'))
 type Picked = { title?: string; buttonLabel?: string; properties?: string[] }
 
 /** The next folder picker answers with `path`, or cancels for null. The real picker is a native sheet that checks cannot drive. */
-const planPicker = (hub: Hub, path: string | null) =>
+export const planPicker = (hub: Hub, path: string | null) =>
   hub.evaluate(({ dialog }, chosen) => {
     const holder = globalThis as unknown as { picked: Picked[] }
     holder.picked = []
@@ -24,9 +24,9 @@ const planPicker = (hub: Hub, path: string | null) =>
     }) as typeof dialog.showOpenDialog
   }, path)
 
-const picked = (hub: Hub) => hub.evaluate(() => (globalThis as unknown as { picked: Picked[] }).picked, null)
+export const picked = (hub: Hub) => hub.evaluate(() => (globalThis as unknown as { picked: Picked[] }).picked, null)
 
-async function chooseAddUltimate(hub: Hub) {
+export async function chooseAddUltimate(hub: Hub) {
   await hub.planMenus(['Ultimate'])
   await hub.shell().locator('#add').click()
   await until('the picker', async () => (await picked(hub)).length === 1, 5000)
