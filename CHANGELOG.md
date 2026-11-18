@@ -7,11 +7,10 @@ User-visible changes to Ultimate Hub, in [Keep a Changelog](https://keepachangel
 ### Added
 
 - Show the Hub logo and a demo video in the README. (#3)
-- Show, pause, start, and close an Ultimate that runs in a sandbox, through a lock that its launcher writes. `uh list` and `uh status` see it too. See `docs/sandbox.md`.
+- Show and control Ultimates in sandboxes; do not use an older Hub with a paused sandbox, or saved tabs can be lost. (#13)
 
 ### Changed
 
-- A paused sandbox saves its restart command in `tabs.json` as `launcher.command`. An older Hub cannot read that record, starts with an empty sidebar, and replaces `tabs.json` at its next save, so do not go back to an older Hub while a sandbox is paused.
 - Select another Ultimate's tab when a link points to it. (#7)
 - Build into `dist.noindex` so Spotlight shows only the installed app. (#8)
 
