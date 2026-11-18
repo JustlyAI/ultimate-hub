@@ -551,7 +551,7 @@ async function inspector(url: string): Promise<{ inShell: (code: string) => Prom
 }
 
 /** A folder that looks like an Ultimate clone, whose entry runs `code` instead. */
-function fakeClone(parent: string, name: string, code: string): string {
+export function fakeClone(parent: string, name: string, code: string): string {
   const clone = join(parent, name)
   mkdirSync(join(clone, 'bin'), { recursive: true })
   writeFileSync(join(clone, 'package.json'), JSON.stringify({ name: 'ultimate' }))

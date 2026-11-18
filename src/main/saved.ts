@@ -1,6 +1,6 @@
 import { readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
-import { isCommand, type Lifecycle,type Saved, type SavedTab, type SidebarForm, type UserGroup, ZOOM_STEPS } from '../shared/tabs.ts'
+import { isCommand, type Lifecycle, type Saved, type SavedTab, type SidebarForm, type UserGroup, ZOOM_STEPS } from '../shared/tabs.ts'
 
 function parseGroup(value: unknown): UserGroup {
   const { id, name, collapsed } = value as UserGroup

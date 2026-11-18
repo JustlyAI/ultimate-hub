@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'
-import { mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync } from 'node:fs'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { createServer as createSocketServer, type AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -14,7 +14,6 @@ const UH = join(import.meta.dirname, '../bin/uh.ts')
 const home = realpathSync(mkdtempSync(join(tmpdir(), 'uh-test-home-')))
 const ROOT = '/projects/alpha'
 const DEAD_ROOT = '/projects/dead'
-const BOXED_ROOT = '/projects/boxed'
 
 type Entry = { kind: string; model?: object[] }
 const said = (text: string): Entry => ({ kind: 'pi.assistant', model: [{ role: 'assistant', content: [{ type: 'text', text }], stopReason: 'stop' }] })
@@ -92,28 +91,60 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
 
 const server = createServer(handle)
 const dead = createSocketServer((socket) => socket.destroy())
-// A sandbox: the launcher is one process, and the port belongs to another, as a sandbox's port forwarder would hold it.
-const boxed = createServer(handle)
-const launcher = spawn('/bin/sleep', ['600'], { stdio: 'ignore' })
 server.listen(0, '127.0.0.1')
 dead.listen(0, '127.0.0.1')
-boxed.listen(0, '127.0.0.1')
-await Promise.all([once(server, 'listening'), once(dead, 'listening'), once(boxed, 'listening'), once(launcher, 'spawn')])
+await Promise.all([once(server, 'listening'), once(dead, 'listening')])
 const { port } = server.address() as AddressInfo
-const boxedPort = (boxed.address() as AddressInfo).port
 writeLock(home, ROOT, { pid: process.pid, port })
 writeLock(home, DEAD_ROOT, { pid: process.pid, port: (dead.address() as AddressInfo).port })
+
+// Sandboxes: each launcher is one process, and its port belongs to another, as a sandbox's port forwarder would hold it.
+const listen = async () => {
+  const sandboxServer = createServer(handle)
+  sandboxServer.listen(0, '127.0.0.1')
+  await once(sandboxServer, 'listening')
+  return sandboxServer
+}
+const sleeper = async () => {
+  const child = spawn('/bin/sleep', ['600'], { stdio: 'ignore' })
+  await once(child, 'spawn')
+  return child
+}
+// The elder starts first, so the launcher is the newer launch: a later start, or the same second and a higher pid.
+const elder = await sleeper()
+const launcher = await sleeper()
+const gone = await sleeper()
+const goneStart = startOf(gone.pid!)
+gone.kill()
+await once(gone, 'exit')
+const [boxed, nulled] = await Promise.all([listen(), listen()])
+const boxedPort = (boxed.address() as AddressInfo).port
+const nulledPort = (nulled.address() as AddressInfo).port
+/** A sandbox's project is a real folder, because Hub keys it by its real path. */
+const folder = (name: string) => {
+  mkdirSync(join(home, 'projects', name), { recursive: true })
+  return join(home, 'projects', name)
+}
+const BOXED_ROOT = folder('boxed')
+const NULLED_ROOT = folder('nulled')
 const sandbox = { pid: launcher.pid!, start: startOf(launcher.pid!), port: boxedPort }
 writeSandboxLock(home, 'boxed', { ...sandbox, project: BOXED_ROOT })
-writeSandboxLock(home, 'reused-pid', { ...sandbox, start: 'Thu Jan  1 00:00:00 1970', project: '/projects/reused-pid' })
-writeSandboxLock(home, 'local-port', { ...sandbox, port, project: '/projects/local-port' })
-writeSandboxLock(home, 'silent', { ...sandbox, port: (dead.address() as AddressInfo).port, project: '/projects/silent' })
+writeSandboxLock(home, 'boxed-crashed', { pid: gone.pid!, start: goneStart, port: nulledPort, project: BOXED_ROOT })
+writeSandboxLock(home, 'nulled', { ...sandbox, port: nulledPort, project: NULLED_ROOT, restart: null })
+writeSandboxLock(home, 'same-port', { pid: elder.pid!, start: startOf(elder.pid!), port: boxedPort, project: folder('same-port') })
+writeSandboxLock(home, 'reused-pid', { ...sandbox, start: 'Thu Jan  1 00:00:00 1970', project: folder('reused-pid') })
+writeSandboxLock(home, 'local-port', { ...sandbox, port, project: folder('local-port') })
+writeSandboxLock(home, 'silent', { ...sandbox, port: (dead.address() as AddressInfo).port, project: folder('silent') })
+writeSandboxLock(home, 'no-folder', { ...sandbox, port: nulledPort, project: join(home, 'projects', 'missing') })
 after(() => {
   server.closeAllConnections()
   server.close()
   dead.close()
-  boxed.closeAllConnections()
-  boxed.close()
+  for (const sandboxServer of [boxed, nulled]) {
+    sandboxServer.closeAllConnections()
+    sandboxServer.close()
+  }
+  elder.kill()
   launcher.kill()
   rmSync(home, { recursive: true, force: true })
 })
@@ -141,12 +172,21 @@ test('list gives each running Ultimate with its root, name, and port', async () 
   assert.equal(output.ok, true)
 })
 
-test('list gives a sandbox only while its launcher runs, an Ultimate answers, and no local Ultimate has its port', async () => {
+test('list gives a sandbox whose launcher runs with its start time and where an Ultimate answers, with or without restart', async () => {
   const { ultimates } = await uh(['list'])
-  assert.deepEqual(ultimates.find(({ root }: { root: string }) => root === BOXED_ROOT), { root: BOXED_ROOT, name: 'boxed', port: boxedPort })
-  const roots = ultimates.map(({ root }: { root: string }) => root)
-  for (const refused of ['/projects/reused-pid', '/projects/local-port', '/projects/silent']) assert.ok(!roots.includes(refused), refused)
+  const rowOf = (root: string) => ultimates.find((row: { root: string }) => row.root === root)
+  assert.deepEqual(rowOf(BOXED_ROOT), { root: BOXED_ROOT, name: 'boxed', port: boxedPort }, 'the lock of a crashed launcher does not hide the live one')
+  assert.deepEqual(rowOf(NULLED_ROOT), { root: NULLED_ROOT, name: 'nulled', port: nulledPort }, 'a null restart still shows')
+  for (const name of ['reused-pid', 'local-port', 'silent', 'missing']) assert.equal(rowOf(join(home, 'projects', name)), undefined, name)
   assert.deepEqual(await uh(['status', BOXED_ROOT]), { ok: true, busy: 2, questions: 1, failures: 3 })
+})
+
+test('one port gives one row: a local Ultimate wins it, then the newest sandbox launch', async () => {
+  const { ultimates } = await uh(['list'])
+  const ports = ultimates.map((row: { port: number }) => row.port)
+  assert.equal(ports.filter((at: number) => at === boxedPort).length, 1)
+  assert.equal(ports.filter((at: number) => at === port).length, 1)
+  assert.equal(ultimates.find((row: { root: string }) => row.root === join(home, 'projects', 'same-port')), undefined)
 })
 
 test('status gives the three counts', async () => {

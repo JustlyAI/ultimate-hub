@@ -61,7 +61,7 @@ export function writeLock(home: string, root: string, lock: { pid: number; port:
 }
 
 /** A sandbox launcher's host lock, as docs/sandbox.md defines it. */
-export function writeSandboxLock(home: string, name: string, lock: { pid: number; start: string; port: number; project: string; restart?: string[] }) {
+export function writeSandboxLock(home: string, name: string, lock: { pid: number; start: string; port: number; project: string; restart?: string[] | null }) {
   const folder = join(home, '.ultimate', 'projects')
   mkdirSync(folder, { recursive: true })
   writeFileSync(join(folder, `${name}.sandbox.lock`), JSON.stringify(lock))

@@ -38,7 +38,8 @@ export function parseSandboxLock(text: string): SandboxLock {
   const lock = parseLock(text)
   const { start, restart } = JSON.parse(text)
   if (typeof start !== 'string' || start.trim() === '') throw new Error('sandbox lock has no start time')
-  if (restart !== undefined && !isCommand(restart)) throw new Error('sandbox lock has no valid restart command')
+  // A missing and a null restart both mean that Hub must not start the sandbox again.
+  if (restart != null && !isCommand(restart)) throw new Error('sandbox lock has no valid restart command')
   return { ...lock, start: oneSpace(start), restart: restart ?? null }
 }
 
@@ -117,44 +118,68 @@ async function readLocks(log: Log): Promise<{ locks: Lock[]; sandboxes: SandboxL
   const [locks, sandboxes] = await Promise.all([
     Promise.all(entries.filter((entry) => entry.isDirectory()).map(({ name }) => readLock(join(directory, name, 'ultimate.lock'), parseLock, log))),
     Promise.all(
-      entries.filter((entry) => entry.isFile() && entry.name.endsWith(SANDBOX_LOCK)).map(({ name }) => readLock(join(directory, name), parseSandboxLock, log)),
+      entries.filter((entry) => entry.isFile() && entry.name.endsWith(SANDBOX_LOCK)).map(({ name }) => readSandboxLock(join(directory, name), log)),
     ),
   ])
   return { locks: locks.filter((lock) => lock !== null), sandboxes: sandboxes.filter((lock) => lock !== null) }
 }
 
-/** Sandbox locks, by their text, where an Ultimate answered. The same launcher with the same start is the same launch. */
-const answeredSandboxes = new Set<string>()
+/**
+ * Ultimate keys a project by its real path, so a sandbox lock must name the same project in the same form. A project
+ * folder that is gone is normal after a delete, so it is not logged.
+ */
+async function readSandboxLock(path: string, log: Log): Promise<SandboxLock | null> {
+  const lock = await readLock(path, parseSandboxLock, log)
+  if (!lock) return null
+  try {
+    return { ...lock, project: await realpath(lock.project) }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') log(`${path}: ${String(error)}`)
+    return null
+  }
+}
 
 /**
  * A sandbox's port can belong to any process, often one of another user that lsof cannot see, so the proof does not use
- * it. The launcher must run with its start time and our user, and an Ultimate must answer on the port once for each
- * launch. After that, the contract makes the launcher exit when its sandbox stops.
+ * it. The launcher must run with its start time and our user, and an Ultimate must answer on the port at each check.
  */
 async function sandboxRuns(lock: SandboxLock): Promise<boolean> {
-  const key = JSON.stringify(lock)
   const found = await processOf(lock.pid).catch(() => null)
-  if (found?.start !== lock.start || found.uid !== process.getuid!()) {
-    answeredSandboxes.delete(key)
-    return false
+  return found?.start === lock.start && found.uid === process.getuid!() && (await statusAnswers(lock.port))
+}
+
+/** Local locks whose process owns the lock's port. While a project starts, its lock can hold a port that another project owns. */
+const provenLocal = (locks: Lock[], listeners: Listeners) => locks.filter((lock) => listeners.get(lock.pid)?.has(lock.port))
+
+/**
+ * The sandbox that Hub shows for each project, from the sandboxes that run. A proven local Ultimate wins its project and
+ * its port. Of the rest, the newest launch wins its project and its port, so a launcher that did not remove its lock never
+ * hides or takes the place of a newer one. The scan and each stop use this one rule, so a stop signals the shown launcher.
+ */
+export function chooseSandboxes(local: Lock[], running: SandboxLock[]): Map<string, SandboxLock> {
+  const projects = new Set(local.map(({ project }) => project))
+  const ports = new Set(local.map(({ port }) => port))
+  const chosen = new Map<string, SandboxLock>()
+  const newestFirst = [...running].sort((a, b) => Date.parse(b.start) - Date.parse(a.start) || b.pid - a.pid)
+  for (const lock of newestFirst) {
+    if (projects.has(lock.project) || ports.has(lock.port)) continue
+    chosen.set(lock.project, lock)
+    projects.add(lock.project)
+    ports.add(lock.port)
   }
-  if (answeredSandboxes.has(key)) return true
-  if (!(await statusAnswers(lock.port))) return false
-  answeredSandboxes.add(key)
-  return true
+  return chosen
+}
+
+async function shownSandboxes(local: Lock[], sandboxes: SandboxLock[]): Promise<Map<string, SandboxLock>> {
+  const runs = await Promise.all(sandboxes.map(sandboxRuns))
+  return chooseSandboxes(local, sandboxes.filter((_, at) => runs[at]))
 }
 
 async function provenInstances(listeners: Listeners, log: Log): Promise<Instance[]> {
   const { locks, sandboxes } = await readLocks(log)
+  const local = provenLocal(locks, listeners)
   const instances = new Map<string, Instance>()
-  for (const lock of locks)
-    // While a project starts, its lock can hold a port that another project owns.
-    if (listeners.get(lock.pid)?.has(lock.port)) instances.set(lock.project, { root: lock.project, port: lock.port })
-  // A local Ultimate that owns its port is the stronger proof, so it wins its project and its port.
-  const ports = new Set([...instances.values()].map(({ port }) => port))
-  const candidates = sandboxes.filter((lock) => !instances.has(lock.project) && !ports.has(lock.port))
-  const running = await Promise.all(candidates.map(sandboxRuns))
-  candidates.forEach((lock, at) => running[at] && instances.set(lock.project, { root: lock.project, port: lock.port }))
+  for (const { project, port } of [...local, ...(await shownSandboxes(local, sandboxes)).values()]) instances.set(project, { root: project, port })
   return [...instances.values()].sort((a, b) => a.root.localeCompare(b.root))
 }
 
@@ -461,39 +486,40 @@ async function fdPaths(pid: number, fd: string): Promise<string[]> {
   return output.split('\n').filter((line) => line.startsWith('n')).map((line) => line.slice(1))
 }
 
+/** A check that ran and said no. A check that could not run is a plain Error, because it proves nothing either way. */
+class NotProven extends Error {}
+
 async function verifyLocal(lock: Lock): Promise<Supervisor> {
   const listening = parseListeners(await query(LSOF, ['-nP', '-a', '-p', String(lock.pid), '-iTCP', '-sTCP:LISTEN', '-Fpn']))
-  if (!listening.get(lock.pid)?.has(lock.port)) throw new Error('The process in the lock does not own its port.')
+  if (!listening.get(lock.pid)?.has(lock.port)) throw new NotProven('The process in the lock does not own its port.')
   const found = await processOf(lock.pid)
-  if (!found) throw new Error('The process in the lock is gone.')
-  if (found.uid !== process.getuid!()) throw new Error('The process belongs to another user.')
+  if (!found) throw new NotProven('The process in the lock is gone.')
+  if (found.uid !== process.getuid!()) throw new NotProven('The process belongs to another user.')
   return { pid: lock.pid, start: found.start, port: lock.port }
-}
-
-async function verifySandbox(lock: SandboxLock): Promise<Supervisor> {
-  const found = await processOf(lock.pid)
-  if (found?.start !== lock.start) throw new Error('The launcher in the sandbox lock is gone.')
-  if (found.uid !== process.getuid!()) throw new Error('The process belongs to another user.')
-  if (!(await statusAnswers(lock.port))) throw new Error('No Ultimate answers on the port in the sandbox lock.')
-  return { pid: lock.pid, start: found.start, port: lock.port, sandbox: { restart: lock.restart } }
 }
 
 /**
  * A sandbox can share Ultimate's project folder, so its project can also have an `ultimate.lock` with a pid from inside
- * the sandbox. That lock fails the local proof, and the sandbox lock is then the one to prove, as in a scan.
+ * the sandbox. Only a local lock that fails its proof gives way to the sandbox. If the check could not run, Hub stops.
  */
 export async function verifySupervisor(root: string, log: Log): Promise<Supervisor> {
   const { locks, sandboxes } = await readLocks(log)
   const lock = locks.find(({ project }) => project === root)
-  const sandbox = sandboxes.find(({ project }) => project === root)
+  let refusal: Error | null = null
   if (lock)
     try {
       return await verifyLocal(lock)
     } catch (error) {
-      if (!sandbox) throw error
+      if (!(error instanceof NotProven)) throw error
+      refusal = error
     }
-  if (!sandbox) throw new Error('Ultimate is not running for this project.')
-  return verifySandbox(sandbox)
+  if (sandboxes.some(({ project }) => project === root)) {
+    const listeners = await readListeners(log)
+    if (!listeners) throw new Error('Hub could not check the process (lsof failed).')
+    const sandbox = (await shownSandboxes(provenLocal(locks, listeners), sandboxes)).get(root)
+    if (sandbox) return { pid: sandbox.pid, start: sandbox.start, port: sandbox.port, sandbox: { restart: sandbox.restart } }
+  }
+  throw refusal ?? new Error('Ultimate is not running for this project.')
 }
 
 /**
