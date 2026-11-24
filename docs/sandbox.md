@@ -18,6 +18,14 @@ A command that starts a sandbox and exits at once, such as `docker run -d` or `d
 
 Hub sends SIGTERM only to the launcher, never to a process of the sandbox.
 
+## Requirements
+
+Hub and the example launcher check the sandbox's Ultimate with `POST /api/extensions/status/actions/status`. They call it from outside the browser, with an `Origin` header for the instance's own port and no browser headers such as `Sec-Fetch-Site`. Ultimate must answer with 200 and a valid status result.
+
+Some security extensions refuse API requests that do not come from Ultimate's own page. Such an Ultimate never passes this check. While the sandbox runs, the example launcher keeps waiting and writes no lock, so Hub shows no tab. Hub logs nothing about this, because there is no lock to read. To check, run the same curl as the example launcher below, using your port. A 403 means Ultimate refuses the request. Even with a lock, Hub does not show a sandbox whose status check fails.
+
+A local Ultimate is different: Hub proves it by its process and port, so it can still show a running tab when the status call is refused. The tab shows **Unknown** once any earlier status expires (after a minute). The reason is in `hub.log`, with `answered 403` for a refused request.
+
 ## The sandbox lock
 
 Write it to `~/.ultimate/projects/<any-name>.sandbox.lock`, beside the project folders, not in one. The name must end in `.sandbox.lock`. Write a temporary file in the same folder, then rename it, so that Hub never reads half a lock.
