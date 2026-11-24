@@ -226,7 +226,7 @@ export function parseStatus(text: string): InstanceStatus {
 
 export type UltimateErrorCode = 'unreachable' | 'not_found' | 'protocol'
 
-/** `sent` is false only when Ultimate certainly did not do the request. A caller must not repeat a request that was sent. */
+/** `sent` is false only when Ultimate certainly did not do the requested work. A caller must not repeat a request that was sent. */
 export class UltimateError extends Error {
   readonly code: UltimateErrorCode
   readonly sent: boolean
