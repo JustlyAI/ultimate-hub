@@ -16,6 +16,8 @@ User-visible changes to Ultimate Hub, in [Keep a Changelog](https://keepachangel
 
 ### Fixed
 
+- `uh read` and `uh wait` work with Ultimate's batched event subscriptions, while still supporting older installs.
+
 - Restore the README's known limits and independence note. (#1)
 - Let a drag above the pages move the window. (#4)
 - Make the title bar taller so the window is easier to drag. (#6)

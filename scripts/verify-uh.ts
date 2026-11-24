@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict'
 import { execFileSync, spawn } from 'node:child_process'
 import { once } from 'node:events'
-import { existsSync } from 'node:fs'
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
 import { readLive } from '../src/main/ultimate.ts'
@@ -41,6 +41,11 @@ const show = (output: Output) => JSON.stringify(output)
 
 try {
   const model = await startScriptedModel(100)
+  // New conversations use the host's default family, not the root conversation's model.
+  mkdirSync(join(home, '.ultimate'), { recursive: true })
+  writeFileSync(join(home, '.ultimate/settings.json'), JSON.stringify({
+    modelFamilies: { families: { default: { model: 'scripted/scripted-1' } } },
+  }))
   const turns = (word: string) => model.requests.filter(({ tools, lastRole, lastText }) => tools && lastRole === 'user' && lastText.includes(word)).length
   const ultimate = startUltimate(home, root, model.agentDir)
   const port = await ultimate.port()
@@ -127,7 +132,8 @@ try {
 
   await check(section, 'a run with a tool step never shows as stopped between its steps', async () => {
     const { conversation: stepped } = await uh(['new', root, '--key', 'proof-steps'])
-    await uh(['send', root, String(stepped), '--key', 'proof-steps-send'], 'ask-owner')
+    // Keep the model turn observable before its quick tool call, rather than racing the first sample.
+    await uh(['send', root, String(stepped), '--key', 'proof-steps-send'], 'ask-owner timed-1000')
     const samples: boolean[] = []
     const deadline = Date.now() + 5000
     while (Date.now() < deadline) {

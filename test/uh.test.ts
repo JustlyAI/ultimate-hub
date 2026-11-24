@@ -31,6 +31,7 @@ type State = {
   created: (string | undefined)[]
   submitted: { conversation: number; text: string }[]
   dropNextWrite: boolean
+  legacyEvents: boolean
 }
 const fresh = (): State => ({
   summaries: [{ id: 1, busy: false }, { id: 5, title: 'Fix the build', busy: false, inputAt: 1000 }],
@@ -41,6 +42,7 @@ const fresh = (): State => ({
   created: [],
   submitted: [],
   dropNextWrite: false,
+  legacyEvents: false,
 })
 let state = fresh()
 beforeEach(() => {
@@ -57,7 +59,7 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
   const data = body ? JSON.parse(body) : {}
   const url = new URL(request.url!, 'http://fake')
   const conversation = /^\/api\/conversations\/(\d+)\/(history|submit)$/.exec(url.pathname)
-  const subscription = /^\/api\/events\/(\w+)\/(\d+)$/.exec(url.pathname)
+  const subscription = (state.legacyEvents ? /^\/api\/events\/(\w+)\/(\d+)$/ : /^\/api\/events\/(\w+)$/).exec(url.pathname)
   if (url.pathname === '/api/events') {
     const id = `s${streams.size}`
     streams.set(id, response)
@@ -66,8 +68,11 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
     response.write(`event: conversations\ndata: ${JSON.stringify(state.summaries)}\n\n`)
     response.write(`event: tasks\ndata: ${JSON.stringify({ tasks: state.tasks })}\n\n`)
   } else if (subscription) {
-    streams.get(subscription[1])!.write(`event: doc\ndata: ${subscription[2]}\ndata: ${JSON.stringify({ kind: 'board', value: { messages: state.board } })}\n\n`)
-    json(response, 200, { ok: true })
+    const spec = state.legacyEvents ? { sub: Number(subscription[2]), ...data } : data.subscribe[0]
+    assert.deepEqual(spec, { sub: 1, docs: ['board'], view: false })
+    if (!state.legacyEvents) assert.deepEqual(data.unsubscribe, [])
+    streams.get(subscription[1])!.write(`event: doc\ndata: ${spec.sub}\ndata: ${JSON.stringify({ kind: 'board', value: { messages: state.board } })}\n\n`)
+    json(response, 200, { ok: true, refused: {} })
   } else if (url.pathname === '/api/extensions/status/actions/status') {
     if (request.headers.origin !== `http://${request.headers.host}`) return json(response, 403, { error: 'Forbidden' })
     response.end(state.status)
@@ -270,6 +275,11 @@ test('read gives question and the text of the open question', async () => {
     { from: 1, to: 'user', reply: true, state: 'delivered', at: 4000, text: 'A question of another conversation?' },
   ]
   assert.deepEqual(await uh(['read', ROOT, '5']), { ok: true, state: 'question', answer: 'Ship it?' })
+})
+
+test('read supports Ultimate before batched subscriptions', async () => {
+  state.legacyEvents = true
+  assert.deepEqual(await uh(['read', ROOT, '5']), { ok: true, state: 'idle', answer: 'Done.' })
 })
 
 test('read gives failed and the error of the run', async () => {

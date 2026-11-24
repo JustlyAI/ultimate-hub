@@ -230,10 +230,12 @@ export type UltimateErrorCode = 'unreachable' | 'not_found' | 'protocol'
 export class UltimateError extends Error {
   readonly code: UltimateErrorCode
   readonly sent: boolean
-  constructor(code: UltimateErrorCode, message: string, sent: boolean) {
+  readonly status?: number
+  constructor(code: UltimateErrorCode, message: string, sent: boolean, status?: number) {
     super(message)
     this.code = code
     this.sent = sent
+    this.status = status
   }
 }
 
@@ -264,7 +266,7 @@ async function call(port: number, path: string, { body, origin, timeout = API_TI
   if (response.ok) return text
   if (response.status === 404 && text.includes('Unknown conversation')) throw new UltimateError('not_found', 'Unknown conversation', false)
   // Ultimate answers 4xx before it acts. A 5xx can come after a part of the work.
-  throw new UltimateError('protocol', `${path} answered ${response.status}`, response.status >= 500)
+  throw new UltimateError('protocol', `${path} answered ${response.status}`, response.status >= 500, response.status)
 }
 
 /** A 2xx answer that does not parse is a new format. The request was done. */
@@ -382,7 +384,17 @@ export async function readLive(port: number, withQuestions: boolean): Promise<Li
         else if (event?.name === 'stream' && withQuestions) {
           const id = (event.data[0] as { id?: unknown } | null)?.id
           if (typeof id !== 'string') throw new UltimateError('protocol', 'stream has no id', false)
-          await call(port, `${path}/${id}/${BOARD_SUBSCRIPTION}`, { body: { docs: ['board'], view: false } })
+          const spec = { sub: BOARD_SUBSCRIPTION, docs: ['board'], view: false }
+          try {
+            const text = await call(port, `${path}/${id}`, { body: { subscribe: [spec], unsubscribe: [] } })
+            const answer = parsed('subscriptions', () => JSON.parse(text))
+            if (answer.refused?.[BOARD_SUBSCRIPTION] !== undefined)
+              throw new UltimateError('protocol', `board subscription refused: ${answer.refused[BOARD_SUBSCRIPTION]}`, false)
+          } catch (error) {
+            // Before Ultimate's batched subscriptions, each subscription had its own endpoint.
+            if (!(error instanceof UltimateError) || error.status !== 404) throw error
+            await call(port, `${path}/${id}/${BOARD_SUBSCRIPTION}`, { body: { docs: ['board'], view: false } })
+          }
         }
         if (complete()) break
       }
