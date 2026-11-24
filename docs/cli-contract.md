@@ -103,11 +103,12 @@ Keys apply on **this machine only** (where `uh` runs).
 
 A privileged [Ultimate Maite](https://github.com/AIF-Of-Counsel/ultimate-maite) matter answers its API only to its own page and to `uh` with the matter's token. The other side of this rule is the matter's inbound guard (`maite-guardrails/uh-token.ts`) and top-maite's `docs/cli-contract.md`.
 
-- The token is a file named **`maite-uh.token`** in the matter's project home (`~/.ultimate/projects/<name>-<hash>/`, the folder whose `ultimate.lock` names the root). It holds 64 hex characters, mode `0600`. The matter's owner creates it; `uh` never writes it.
+- The token is a file named **`maite-uh.token`** in the matter's project home (`~/.ultimate/projects/<name>-<hash>/`, the folder whose `ultimate.lock` names the root and the running port). It holds 64 hex characters, mode `0600`. The matter's owner creates it; `uh` never writes it.
 - When the file exists, `uh` sends it in the **`X-Maite-Uh-Token`** header with each request to that root, and to no other Ultimate. A file that is a link, of another user, or readable by group or others gives `internal`, and `uh` sends nothing.
 - The matter admits the token only on the requests `uh` makes: the status action, `GET /api/events` and its board subscription, new conversation, submit, and history. It audits each one, without the token or any content.
 - Without the file, or with a wrong token, the matter answers 403, and `uh` gives `protocol`.
 - Deleting the file revokes `uh`; writing a new token rotates it. Neither needs a restart.
+- Before Ultimate's batched subscriptions, `uh` used an older subscription path. A privileged matter does not admit it, so `read` and `wait` against a matter need a current Ultimate.
 - The Hub app's status poll never reads or sends the token (`src/main/ultimate.ts` `readMaiteToken`, called only from `src/cli/uh.ts`).
 
 ## Known limits

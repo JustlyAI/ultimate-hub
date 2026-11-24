@@ -1,7 +1,7 @@
 import { type ChildProcess, execFile, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { closeSync, constants, existsSync, openSync, realpathSync } from 'node:fs'
-import { access, lstat, readdir, readFile, realpath, stat } from 'node:fs/promises'
+import { access, open, readdir, readFile, realpath, stat } from 'node:fs/promises'
 import { homedir, userInfo } from 'node:os'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { type Command, type Instance, type InstanceStatus, type Launcher, isCommand } from '../shared/tabs.ts'
@@ -127,24 +127,31 @@ async function readLocks(log: Log): Promise<{ locks: Lock[]; sandboxes: SandboxL
 export const MAITE_UH_TOKEN_FILE = 'maite-uh.token'
 
 /**
- * The token that a privileged Maite matter's inbound guard asks of `uh`, from the home whose lock names the root, the
- * running Ultimate's own. No file means no token. A file that is a link, of another user, or readable by others is
- * refused, as the guard refuses it. Only `uh` reads it: Hub's status poll never sends it.
+ * The token that a privileged Maite matter's inbound guard asks of `uh`, from the home whose lock names the root and the
+ * port it runs on, the running Ultimate's own; a moved clone can leave an older home with the same root. No file means
+ * no token. A file that is a link, of another user, or readable by others is refused, as the guard refuses it. Only `uh`
+ * reads it: Hub's status poll never sends it. A sandbox has no local home, so it never gets a token.
  */
-export async function readMaiteToken(root: string, log: Log): Promise<string | undefined> {
+export async function readMaiteToken(root: string, port: number, log: Log): Promise<string | undefined> {
   const directory = projectsFolder()
   const entries = await readdir(directory, { withFileTypes: true }).catch(() => [])
   for (const { name } of entries.filter((entry) => entry.isDirectory())) {
     const lock = await readLock(join(directory, name, 'ultimate.lock'), parseLock, log)
-    if (lock?.project !== root) continue
+    if (lock?.project !== root || lock.port !== port) continue
     const path = join(directory, name, MAITE_UH_TOKEN_FILE)
-    const found = await lstat(path).catch((error: NodeJS.ErrnoException) => {
+    // One descriptor, opened without following a link, is checked and read, so the file cannot change in between.
+    const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK).catch((error: NodeJS.ErrnoException) => {
       if (error.code === 'ENOENT') return null
-      throw error
+      throw new Error(`${path} is not an owner-only file.`)
     })
-    if (!found) return undefined
-    if (!found.isFile() || found.uid !== process.getuid!() || (found.mode & 0o077) !== 0) throw new Error(`${path} is not an owner-only file.`)
-    return (await readFile(path, 'utf8')).trim()
+    if (!file) return undefined
+    try {
+      const found = await file.stat()
+      if (!found.isFile() || found.uid !== process.getuid!() || (found.mode & 0o077) !== 0) throw new Error(`${path} is not an owner-only file.`)
+      return (await file.readFile('utf8')).trim()
+    } finally {
+      await file.close()
+    }
   }
   return undefined
 }

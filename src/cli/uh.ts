@@ -158,7 +158,7 @@ async function execute(argv: string[], stdin: () => Promise<string>): Promise<Re
   if (!instance) throw new Failure('not_running', `No running Ultimate has the root ${root}.`)
   let token: string | undefined
   try {
-    token = await readMaiteToken(root, log)
+    token = await readMaiteToken(root, instance.port, log)
   } catch (error) {
     throw new Failure('internal', (error as Error).message)
   }
