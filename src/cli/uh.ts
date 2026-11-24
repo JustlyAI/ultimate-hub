@@ -9,6 +9,7 @@ import {
   createScanner,
   readAssistantMessages,
   readLive,
+  readMaiteToken,
   readStatus,
   submit,
 } from '../main/ultimate.ts'
@@ -46,7 +47,8 @@ export function turnOf(conversation: Conversation, questions: OpenQuestion[], me
 }
 
 type Options = { key?: string; title?: string; timeout?: string }
-type Input = { port: number; root: string; conversation: number; options: Options; stdin: () => Promise<string> }
+/** `token` is the privileged Maite matter's token for `uh`, absent for any other Ultimate. */
+type Input = { port: number; root: string; conversation: number; options: Options; stdin: () => Promise<string>; token?: string }
 type Spec = { positionals: number; options: (keyof Options)[]; run(input: Input): Promise<Record<string, unknown>> }
 
 const log = (line: string) => process.stderr.write(`${line}\n`)
@@ -58,8 +60,8 @@ async function running() {
   return instances
 }
 
-async function readTurn(port: number, id: number): Promise<Turn> {
-  const [live, messages] = await Promise.all([readLive(port, true), readAssistantMessages(port, id)])
+async function readTurn(port: number, id: number, token: string | undefined): Promise<Turn> {
+  const [live, messages] = await Promise.all([readLive(port, true, token), readAssistantMessages(port, id, token)])
   const conversation = live.conversations.find((candidate) => candidate.id === id)
   if (!conversation) throw new Failure('not_found', 'Unknown conversation')
   return turnOf(conversation, live.questions, messages)
@@ -79,49 +81,49 @@ const commands: Record<string, Spec> = {
   status: {
     positionals: 1,
     options: [],
-    run: async ({ port }) => {
-      const { busy, questions, failures } = await readStatus(port)
+    run: async ({ port, token }) => {
+      const { busy, questions, failures } = await readStatus(port, undefined, token)
       return { busy, questions, failures }
     },
   },
   conversations: {
     positionals: 1,
     options: [],
-    run: async ({ port }) => ({
-      conversations: (await readLive(port, false)).conversations.map(({ id, title, busy }) => ({ id, title, busy })),
+    run: async ({ port, token }) => ({
+      conversations: (await readLive(port, false, token)).conversations.map(({ id, title, busy }) => ({ id, title, busy })),
     }),
   },
   new: {
     positionals: 1,
     options: ['key', 'title'],
-    run: async ({ port, root, options }) => ({
-      conversation: await once(keyOf(options), JSON.stringify(['new', root, options.title ?? null]), () => createConversation(port, options.title)),
+    run: async ({ port, root, options, token }) => ({
+      conversation: await once(keyOf(options), JSON.stringify(['new', root, options.title ?? null]), () => createConversation(port, options.title, token)),
     }),
   },
   send: {
     positionals: 2,
     options: ['key'],
-    run: async ({ port, root, conversation, options, stdin }) => {
+    run: async ({ port, root, conversation, options, stdin, token }) => {
       const key = keyOf(options)
       const prompt = await stdin()
       if (!prompt.trim()) throw new Failure('usage', 'Give the prompt text on stdin.')
-      return { submission: await once(key, JSON.stringify(['send', root, conversation]), () => submit(port, conversation, prompt)) }
+      return { submission: await once(key, JSON.stringify(['send', root, conversation]), () => submit(port, conversation, prompt, token)) }
     },
   },
   read: {
     positionals: 2,
     options: [],
-    run: async ({ port, conversation }) => readTurn(port, conversation),
+    run: async ({ port, conversation, token }) => readTurn(port, conversation, token),
   },
   wait: {
     positionals: 2,
     options: ['timeout'],
-    run: async ({ port, conversation, options }) => {
+    run: async ({ port, conversation, options, token }) => {
       const seconds = options.timeout === undefined ? DEFAULT_WAIT_S : Number(options.timeout)
       if (options.timeout === '' || !Number.isFinite(seconds) || seconds < 0) throw new Failure('usage', '--timeout is a number of seconds.')
       const deadline = performance.now() + seconds * 1000
       for (;;) {
-        const turn = await readTurn(port, conversation)
+        const turn = await readTurn(port, conversation, token)
         const left = deadline - performance.now()
         if (turn.state !== 'working' || left <= 0) return turn
         await sleep(Math.min(POLL_MS, left))
@@ -154,7 +156,13 @@ async function execute(argv: string[], stdin: () => Promise<string>): Promise<Re
   if (spec.positionals === 2 && !/^[1-9]\d{0,14}$/.test(id)) throw new Failure('usage', '<conversation> is a conversation id, a positive integer.')
   const instance = (await running()).find((candidate) => candidate.root === root)
   if (!instance) throw new Failure('not_running', `No running Ultimate has the root ${root}.`)
-  return spec.run({ port: instance.port, root, conversation: Number(id), options, stdin })
+  let token: string | undefined
+  try {
+    token = await readMaiteToken(root, log)
+  } catch (error) {
+    throw new Failure('internal', (error as Error).message)
+  }
+  return spec.run({ port: instance.port, root, conversation: Number(id), options, stdin, token })
 }
 
 /** Never throws. Each error becomes the failure shape of the contract. */

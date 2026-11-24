@@ -1,7 +1,7 @@
 import { type ChildProcess, execFile, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { closeSync, constants, existsSync, openSync, realpathSync } from 'node:fs'
-import { access, readdir, readFile, realpath, stat } from 'node:fs/promises'
+import { access, lstat, readdir, readFile, realpath, stat } from 'node:fs/promises'
 import { homedir, userInfo } from 'node:os'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { type Command, type Instance, type InstanceStatus, type Launcher, isCommand } from '../shared/tabs.ts'
@@ -124,6 +124,31 @@ async function readLocks(log: Log): Promise<{ locks: Lock[]; sandboxes: SandboxL
   return { locks: locks.filter((lock) => lock !== null), sandboxes: sandboxes.filter((lock) => lock !== null) }
 }
 
+export const MAITE_UH_TOKEN_FILE = 'maite-uh.token'
+
+/**
+ * The token that a privileged Maite matter's inbound guard asks of `uh`, from the home whose lock names the root, the
+ * running Ultimate's own. No file means no token. A file that is a link, of another user, or readable by others is
+ * refused, as the guard refuses it. Only `uh` reads it: Hub's status poll never sends it.
+ */
+export async function readMaiteToken(root: string, log: Log): Promise<string | undefined> {
+  const directory = projectsFolder()
+  const entries = await readdir(directory, { withFileTypes: true }).catch(() => [])
+  for (const { name } of entries.filter((entry) => entry.isDirectory())) {
+    const lock = await readLock(join(directory, name, 'ultimate.lock'), parseLock, log)
+    if (lock?.project !== root) continue
+    const path = join(directory, name, MAITE_UH_TOKEN_FILE)
+    const found = await lstat(path).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === 'ENOENT') return null
+      throw error
+    })
+    if (!found) return undefined
+    if (!found.isFile() || found.uid !== process.getuid!() || (found.mode & 0o077) !== 0) throw new Error(`${path} is not an owner-only file.`)
+    return (await readFile(path, 'utf8')).trim()
+  }
+  return undefined
+}
+
 /**
  * Ultimate keys a project by its real path, so a sandbox lock must name the same project in the same form. A project
  * folder that is gone is normal after a delete, so it is not logged.
@@ -242,16 +267,19 @@ export class UltimateError extends Error {
 // Ultimate admits a request without a proxy header only on a loopback address.
 const originOf = (port: number) => `http://127.0.0.1:${port}`
 
-type Call = { body?: object; origin?: boolean; timeout?: number }
+type Call = { body?: object; origin?: boolean; timeout?: number; token?: string }
 
-async function call(port: number, path: string, { body, origin, timeout = API_TIMEOUT_MS }: Call = {}): Promise<string> {
+/** `token` is the Maite matter's token for `uh`; its header goes only to the matter on loopback. */
+const tokenHeader = (token: string | undefined): Record<string, string> => (token === undefined ? {} : { 'X-Maite-Uh-Token': token })
+
+async function call(port: number, path: string, { body, origin, timeout = API_TIMEOUT_MS, token }: Call = {}): Promise<string> {
   let response: Response
   let text: string
   try {
     response = await fetch(originOf(port) + path, {
       method: body ? 'POST' : 'GET',
       // Ultimate refuses an action with no Origin, and its status README tells dashboards to send their instance's own.
-      headers: origin ? { Origin: originOf(port) } : {},
+      headers: { ...(origin ? { Origin: originOf(port) } : {}), ...tokenHeader(token) },
       body: body && JSON.stringify(body),
       signal: AbortSignal.timeout(timeout),
       // Ultimate is on loopback. A redirect would send the body to another host.
@@ -278,9 +306,9 @@ function parsed<T>(what: string, parse: () => T): T {
   }
 }
 
-export async function readStatus(port: number, since?: number): Promise<InstanceStatus> {
+export async function readStatus(port: number, since?: number, token?: string): Promise<InstanceStatus> {
   const path = '/api/extensions/status/actions/status'
-  const text = await call(port, path, { body: { args: since === undefined ? {} : { since } }, origin: true })
+  const text = await call(port, path, { body: { args: since === undefined ? {} : { since } }, origin: true, token })
   return parsed('status', () => parseStatus(text))
 }
 
@@ -365,13 +393,17 @@ const BOARD_SUBSCRIPTION = 1
  * uses. This opens the stream, reads the first of each, and closes it. Open questions cost one subscription, to the
  * `board` document.
  */
-export async function readLive(port: number, withQuestions: boolean): Promise<Live> {
+export async function readLive(port: number, withQuestions: boolean, token?: string): Promise<Live> {
   const path = '/api/events'
   const stop = new AbortController()
   const found: { conversations?: unknown; tasks?: unknown; board?: unknown } = {}
   const complete = () => 'conversations' in found && 'tasks' in found && (!withQuestions || 'board' in found)
   try {
-    const response = await fetch(originOf(port) + path, { signal: AbortSignal.any([stop.signal, AbortSignal.timeout(API_TIMEOUT_MS)]), redirect: 'error' })
+    const response = await fetch(originOf(port) + path, {
+      headers: tokenHeader(token),
+      signal: AbortSignal.any([stop.signal, AbortSignal.timeout(API_TIMEOUT_MS)]),
+      redirect: 'error',
+    })
     if (!response.ok || !response.body) throw new UltimateError('protocol', `${path} answered ${response.status}`, false)
     let buffer = ''
     for await (const chunk of response.body.pipeThrough(new TextDecoderStream())) {
@@ -386,14 +418,14 @@ export async function readLive(port: number, withQuestions: boolean): Promise<Li
           if (typeof id !== 'string') throw new UltimateError('protocol', 'stream has no id', false)
           const spec = { sub: BOARD_SUBSCRIPTION, docs: ['board'], view: false }
           try {
-            const text = await call(port, `${path}/${id}`, { body: { subscribe: [spec], unsubscribe: [] } })
+            const text = await call(port, `${path}/${id}`, { body: { subscribe: [spec], unsubscribe: [] }, token })
             const answer = parsed('subscriptions', () => JSON.parse(text))
             if (answer.refused?.[BOARD_SUBSCRIPTION] !== undefined)
               throw new UltimateError('protocol', `board subscription refused: ${answer.refused[BOARD_SUBSCRIPTION]}`, false)
           } catch (error) {
             // Before Ultimate's batched subscriptions, each subscription had its own endpoint.
             if (!(error instanceof UltimateError) || error.status !== 404) throw error
-            await call(port, `${path}/${id}/${BOARD_SUBSCRIPTION}`, { body: { docs: ['board'], view: false } })
+            await call(port, `${path}/${id}/${BOARD_SUBSCRIPTION}`, { body: { docs: ['board'], view: false }, token })
           }
         }
         if (complete()) break
@@ -415,10 +447,10 @@ export async function readLive(port: number, withQuestions: boolean): Promise<Li
 }
 
 /** Newest first, down to the newest message that has text. Throws `not_found` for an unknown conversation. */
-export async function readAssistantMessages(port: number, conversation: number): Promise<AssistantMessage[]> {
+export async function readAssistantMessages(port: number, conversation: number, token?: string): Promise<AssistantMessage[]> {
   const messages: AssistantMessage[] = []
   for (let before: number | undefined = Number.MAX_SAFE_INTEGER; before !== undefined; ) {
-    const text = await call(port, `/api/conversations/${conversation}/history?before=${before}`)
+    const text = await call(port, `/api/conversations/${conversation}/history?before=${before}`, { token })
     const page = parsed('history', () => parseHistory(text))
     const answer = page.messages.findIndex((message) => message.text !== null)
     if (answer !== -1) return [...messages, ...page.messages.slice(0, answer + 1)]
@@ -428,14 +460,14 @@ export async function readAssistantMessages(port: number, conversation: number):
   return messages
 }
 
-export async function createConversation(port: number, title: string | undefined): Promise<number> {
-  const text = await call(port, '/api/conversations', { body: { title }, timeout: WRITE_TIMEOUT_MS })
+export async function createConversation(port: number, title: string | undefined, token?: string): Promise<number> {
+  const text = await call(port, '/api/conversations', { body: { title }, timeout: WRITE_TIMEOUT_MS, token })
   return parsed('new conversation', () => idOf(JSON.parse(text).id, 'new conversation'))
 }
 
 /** Ultimate has no idempotency key for a submit. The caller must make sure that it sends each prompt once. */
-export async function submit(port: number, conversation: number, prompt: string): Promise<number> {
-  const text = await call(port, `/api/conversations/${conversation}/submit`, { body: { text: prompt }, timeout: WRITE_TIMEOUT_MS })
+export async function submit(port: number, conversation: number, prompt: string, token?: string): Promise<number> {
+  const text = await call(port, `/api/conversations/${conversation}/submit`, { body: { text: prompt }, timeout: WRITE_TIMEOUT_MS, token })
   return parsed('submission', () => idOf(JSON.parse(text).submissionId, 'submission'))
 }
 
