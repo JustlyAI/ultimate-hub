@@ -227,6 +227,11 @@ export async function startScriptedModel(pieceDelayMs = 150) {
         return response.end(JSON.stringify({ error: { message: 'scripted failure', type: 'invalid_request_error' } }))
       }
       response.writeHead(200, { 'Content-Type': 'text/event-stream' })
+      const timed = /timed-(\d+)/.exec(word)
+      if (timed) {
+        response.write(chunk({ role: 'assistant', content: 'Working. ' }))
+        await sleep(Number(timed[1]))
+      }
       if (word.includes('ask-owner')) {
         const args = { to: 'user', text: 'Ship it?', questions: [{ text: 'Ship it?', kind: 'confirm' }] }
         response.write(
@@ -234,11 +239,6 @@ export async function startScriptedModel(pieceDelayMs = 150) {
         )
         response.write(chunk({}, 'tool_calls'))
         return response.end('data: [DONE]\n\n')
-      }
-      const timed = /timed-(\d+)/.exec(word)
-      if (timed) {
-        response.write(chunk({ role: 'assistant', content: 'Working. ' }))
-        await sleep(Number(timed[1]))
       }
       if (word.includes('hold-turn')) {
         response.write(chunk({ role: 'assistant', content: 'Holding. ' }))
