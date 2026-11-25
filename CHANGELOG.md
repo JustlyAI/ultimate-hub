@@ -8,6 +8,7 @@ User-visible changes to Ultimate Hub, in [Keep a Changelog](https://keepachangel
 
 - Show the Hub logo and a demo video in the README. (#3)
 - Show and control Ultimates in sandboxes; do not use an older Hub with a paused sandbox, or saved tabs can be lost. (#13)
+- Let `uh` use an optional per-instance access token for Ultimates that restrict API requests. (#17)
 
 ### Changed
 
