@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { createServer as createSocketServer, type AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, beforeEach, test } from 'node:test'
 import { turnOf } from '../src/cli/uh.ts'
-import { startOf, writeLock, writeSandboxLock } from './support/fixtures.ts'
+import { projectHome, startOf, writeLock, writeSandboxLock } from './support/fixtures.ts'
 
 const UH = join(import.meta.dirname, '../bin/uh.ts')
 const home = realpathSync(mkdtempSync(join(tmpdir(), 'uh-test-home-')))
@@ -32,6 +32,9 @@ type State = {
   submitted: { conversation: number; text: string }[]
   dropNextWrite: boolean
   legacyEvents: boolean
+  /** The token header of each request to the matter. */
+  tokens: (string | undefined)[]
+  leaked: string[]
 }
 const fresh = (): State => ({
   summaries: [{ id: 1, busy: false }, { id: 5, title: 'Fix the build', busy: false, inputAt: 1000 }],
@@ -43,6 +46,8 @@ const fresh = (): State => ({
   submitted: [],
   dropNextWrite: false,
   legacyEvents: false,
+  tokens: [],
+  leaked: [],
 })
 let state = fresh()
 beforeEach(() => {
@@ -58,6 +63,12 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
   for await (const chunk of request) body += chunk
   const data = body ? JSON.parse(body) : {}
   const url = new URL(request.url!, 'http://fake')
+  const token = request.headers['x-maite-uh-token'] as string | undefined
+  // Only the matter's own fake asks for a token. Any token that reaches another port is a leak.
+  const matter = request.socket.localPort === matterPort
+  if (matter) state.tokens.push(token)
+  else if (token !== undefined) state.leaked.push(token)
+  if (matter && token !== MATTER_TOKEN) return json(response, 403, { error: 'Forbidden' })
   const conversation = /^\/api\/conversations\/(\d+)\/(history|submit)$/.exec(url.pathname)
   const subscription = (state.legacyEvents ? /^\/api\/events\/(\w+)\/(\d+)$/ : /^\/api\/events\/(\w+)$/).exec(url.pathname)
   if (url.pathname === '/api/events') {
@@ -101,6 +112,16 @@ dead.listen(0, '127.0.0.1')
 await Promise.all([once(server, 'listening'), once(dead, 'listening')])
 const { port } = server.address() as AddressInfo
 writeLock(home, ROOT, { pid: process.pid, port })
+// A privileged Maite matter, with its token in its own project home, which refuses every request without it.
+const MATTER_ROOT = '/projects/matter'
+const MATTER_TOKEN = 'ab'.repeat(32)
+const matterServer = createServer(handle)
+matterServer.listen(0, '127.0.0.1')
+await once(matterServer, 'listening')
+const matterPort = (matterServer.address() as AddressInfo).port
+writeLock(home, MATTER_ROOT, { pid: process.pid, port: matterPort })
+const tokenFile = join(projectHome(home, MATTER_ROOT), 'maite-uh.token')
+writeFileSync(tokenFile, `${MATTER_TOKEN}\n`, { mode: 0o600 })
 writeLock(home, DEAD_ROOT, { pid: process.pid, port: (dead.address() as AddressInfo).port })
 
 // Sandboxes: each launcher is one process, and its port belongs to another, as a sandbox's port forwarder would hold it.
@@ -145,7 +166,7 @@ after(() => {
   server.closeAllConnections()
   server.close()
   dead.close()
-  for (const sandboxServer of [boxed, nulled]) {
+  for (const sandboxServer of [boxed, nulled, matterServer]) {
     sandboxServer.closeAllConnections()
     sandboxServer.close()
   }
@@ -302,6 +323,45 @@ test('wait returns when the conversation stops working', async () => {
     state.history[5] = [said('The new answer.'), asked, ...state.history[5]]
   }, 1200)
   assert.deepEqual(await uh(['wait', ROOT, '5', '--timeout', '30']), { ok: true, state: 'idle', answer: 'The new answer.' })
+})
+
+test("each request to a Maite matter carries the matter's token", async () => {
+  assert.deepEqual(await uh(['status', MATTER_ROOT]), { ok: true, busy: 2, questions: 1, failures: 3 })
+  assert.equal((await uh(['conversations', MATTER_ROOT])).ok, true)
+  assert.deepEqual(await uh(['new', MATTER_ROOT, '--key', 'm1']), { ok: true, conversation: 41 })
+  assert.deepEqual(await uh(['send', MATTER_ROOT, '5', '--key', 'm2'], 'Go.'), { ok: true, submission: 71 })
+  assert.deepEqual(await uh(['read', MATTER_ROOT, '5']), { ok: true, state: 'idle', answer: 'Done.' })
+  assert.ok(state.tokens.length >= 7)
+  assert.ok(state.tokens.every((token) => token === MATTER_TOKEN))
+  await uh(['read', ROOT, '5'])
+  await uh(['status', BOXED_ROOT])
+  assert.deepEqual(state.leaked, [])
+})
+
+test('a token file that is a link is refused, and the token is never sent', async () => {
+  const real = join(home, 'elsewhere.token')
+  writeFileSync(real, MATTER_TOKEN, { mode: 0o600 })
+  renameSync(tokenFile, `${tokenFile}.kept`)
+  symlinkSync(real, tokenFile)
+  try {
+    assert.equal(await codeOf(['status', MATTER_ROOT]), 'internal')
+    assert.deepEqual(state.tokens, [])
+  } finally {
+    rmSync(tokenFile)
+    renameSync(`${tokenFile}.kept`, tokenFile)
+  }
+})
+
+test('a token file that others can read is refused, and the token is never sent', async () => {
+  chmodSync(tokenFile, 0o644)
+  try {
+    const output = await uh(['status', MATTER_ROOT])
+    assert.equal(output.error.code, 'internal')
+    assert.doesNotMatch(output.error.message, new RegExp(MATTER_TOKEN))
+    assert.deepEqual(state.tokens, [])
+  } finally {
+    chmodSync(tokenFile, 0o600)
+  }
 })
 
 test('each error has its code', async () => {
