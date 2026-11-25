@@ -45,6 +45,7 @@ export type SavedTab = {
   name: string | null // null means use the folder name.
   groupId: GroupId | null // null means Ungrouped.
   lifecycle: Lifecycle | null
+  favorite: boolean // A favorite shows in its own place and again in Favorites.
 }
 
 /** tabs.json. One file, so that a group removal and the moves of its tabs save together. */
@@ -53,6 +54,7 @@ export type Saved = {
   tabs: SavedTab[] // Every known project, including hidden ones. The order inside each group is this order.
   zoom: number // The zoom factor of every Ultimate page. 1 is actual size.
   sidebar: SidebarForm
+  favoritesCollapsed: boolean
 }
 
 export type SidebarForm = 'full' | 'rail'
@@ -122,6 +124,7 @@ export type Row = {
   lifecycle: RowLifecycle
   status: StatusKind | null // null while the project is not running.
   error: string | null
+  favorite: boolean
 }
 
 export type StatusSection = { kind: StatusKind; label: string; rows: Row[] }
@@ -136,8 +139,16 @@ export type GroupView = {
   rows: Row[] // Also when collapsed. The renderer hides them.
 }
 
+/** The favorite rows, in sidebar order. Each row also shows in its group or in Ungrouped. */
+export type FavoritesView = {
+  collapsed: boolean
+  status: StatusKind | null
+  rows: Row[]
+}
+
 export type Sidebar = {
   form: SidebarForm
+  favorites: FavoritesView
   groups: GroupView[]
   ungrouped: Row[]
   status: StatusSection[]
@@ -155,6 +166,8 @@ export type Command =
   | { type: 'rename'; root: string; name: string }
   | { type: 'move'; root: string; target: string; place: 'before' | 'after' }
   | { type: 'remove'; root: string }
+  | { type: 'favorite'; root: string; favorite: boolean }
+  | { type: 'collapse-favorites'; collapsed: boolean }
   | { type: 'cycle'; by: 1 | -1 }
   | { type: 'status'; root: string; port: number; since: number | undefined; status: InstanceStatus }
   | { type: 'create-group'; id: GroupId; name: string }
@@ -234,6 +247,7 @@ function statusOf(watched: LastStatus | undefined): StatusKind {
 }
 
 const isShown = (state: TabsState, tab: SavedTab) =>
+  tab.favorite ||
   tab.groupId !== null ||
   tab.name !== null ||
   tab.lifecycle !== null ||
@@ -255,21 +269,24 @@ export function sidebarOf(state: TabsState): Sidebar {
           lifecycle,
           status: lifecycle === 'running' ? statusOf(state.watched[tab.root]) : null,
           error: state.errors[tab.root] ?? null,
+          favorite: tab.favorite,
         }
       })
+  const urgentOf = (rows: Row[]) => STATUS_ORDER.find(({ kind }) => kind !== 'idle' && rows.some((row) => row.status === kind))?.kind ?? null
   const groups = state.saved.groups.map(({ id, name, collapsed }) => {
     const rows = rowsIn(id)
-    const urgent = STATUS_ORDER.find(({ kind }) => kind !== 'idle' && rows.some((row) => row.status === kind))
-    return { id, name, collapsed, count: rows.length, hidesSelected: collapsed && rows.some((row) => row.selected), status: urgent?.kind ?? null, rows }
+    return { id, name, collapsed, count: rows.length, hidesSelected: collapsed && rows.some((row) => row.selected), status: urgentOf(rows), rows }
   })
   const ungrouped = rowsIn(null)
   const rows = [...groups.flatMap((group) => group.rows), ...ungrouped]
+  const favoriteRows = rows.filter((row) => row.favorite)
+  const favorites = { collapsed: state.saved.favoritesCollapsed, status: urgentOf(favoriteRows), rows: favoriteRows }
   const status = STATUS_ORDER.map(({ kind, label }) => ({
     kind,
     label,
     rows: rows.filter((row) => row.status === kind),
   })).filter((section) => section.rows.length > 0)
-  return { form: state.saved.sidebar, groups, ungrouped, status }
+  return { form: state.saved.sidebar, favorites, groups, ungrouped, status }
 }
 
 const visibleRows = ({ groups, ungrouped }: Sidebar) => [...groups.flatMap((group) => (group.collapsed ? [] : group.rows)), ...ungrouped]
@@ -322,7 +339,7 @@ function transition(state: TabsState, command: Command, now: number): TabsState 
     case 'scan': {
       const added = command.instances
         .filter(({ root }) => !tabs.some((tab) => tab.root === root))
-        .map(({ root }) => ({ root, name: null, groupId: null, lifecycle: null }))
+        .map(({ root }) => ({ root, name: null, groupId: null, lifecycle: null, favorite: false }))
       // A status belongs to one process. A stopped tab has none, and a new port is a new process.
       const watched = Object.fromEntries(
         command.instances.flatMap(({ root, port }) => {
@@ -344,13 +361,17 @@ function transition(state: TabsState, command: Command, now: number): TabsState 
       const lifecycle: Lifecycle | null = startable ? { kind: 'paused', launcher } : (tab?.lifecycle ?? null)
       const next = tab
         ? tabs.map((candidate) => (candidate.root === root ? { ...candidate, lifecycle } : candidate))
-        : [...tabs, { root, name: null, groupId: null, lifecycle }]
+        : [...tabs, { root, name: null, groupId: null, lifecycle, favorite: false }]
       return selected(withTabs(next), root)
     }
     case 'rename': {
       const name = command.name.trim() || null
       return withTabs(tabs.map((tab) => (tab.root === command.root ? { ...tab, name } : tab)))
     }
+    case 'favorite':
+      return withTabs(tabs.map((tab) => (tab.root === command.root ? { ...tab, favorite: command.favorite } : tab)))
+    case 'collapse-favorites':
+      return { ...state, saved: { ...state.saved, favoritesCollapsed: command.collapsed } }
     case 'move': {
       const moved = tabs.find(({ root }) => root === command.root)
       if (!moved || command.root === command.target) return state

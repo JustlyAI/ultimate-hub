@@ -278,7 +278,7 @@ export async function runRuleChecks(check: Check) {
     const dragged = await hub.labels()
     assert.deepEqual(dragged, [last, first, order[1]])
     assert.deepEqual(hub.savedTabs().map(({ root }) => String(root).split('/').pop()), dragged, 'array order is the order')
-    assert.ok(hub.savedTabs().every((tab) => Object.keys(tab).join() === 'root,name,groupId,lifecycle'), 'each saved tab holds only root, name, groupId, and lifecycle')
+    assert.ok(hub.savedTabs().every((tab) => Object.keys(tab).join() === 'root,name,groupId,lifecycle,favorite'), 'each saved tab holds only root, name, groupId, lifecycle, and favorite')
     const middle = dragged[1]
     const middleStub = [a, b, c].find(({ root }) => root.endsWith(middle))!
     await hub.select(dragged[0])

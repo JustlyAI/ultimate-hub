@@ -678,7 +678,7 @@ export async function runGroupChecks(check: Check) {
       assert.equal(await hub.tab('Website'), undefined)
       assert.ok(hub.log().includes('tabs.json'), hub.log())
       await until('the new shape', () => Array.isArray(hub.saved().groups))
-      assert.deepEqual(hub.saved(), { groups: [], tabs: [{ root: a.root, name: null, groupId: null, lifecycle: null }], zoom: 1, sidebar: 'full' })
+      assert.deepEqual(hub.saved(), { groups: [], tabs: [{ root: a.root, name: null, groupId: null, lifecycle: null, favorite: false }], zoom: 1, sidebar: 'full', favoritesCollapsed: false })
       return `The array with "Website" gave a log line (${hub.log().trim().split('\n').at(-1)}). alpha showed with its folder name, and tabs.json became { groups: [], tabs: [alpha], zoom: 1, sidebar: 'full' }.`
     } finally {
       await hub.quit()

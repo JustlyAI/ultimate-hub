@@ -140,6 +140,44 @@ export async function runSidebarChecks(check: Check) {
       return `No label was cut, ungrouped or in a group, with document-review selected. Sidebar ${width} px. Screenshot sidebar-1-full.png`
     })
 
+    await check(section, 'a star adds a tab to Favorites above the groups and keeps it in its group, Favorites collapses, and a star in Favorites removes it', async () => {
+      const before = await hub.topNames()
+      const favoriteRow = (label: string) => hub.shell().locator('#top .favorites .tab', { has: hub.shell().locator(`.label:text-is("${label}")`) })
+      const savedFavorites = () => hub.savedTabs().filter((tab) => tab.favorite === true).map((tab) => String(tab.root).split('/').pop())
+      for (const name of ['monorepo', 'transcription-menubar']) await hub.topRow(name).locator('.star').click()
+      await until('two favorites', async () => (await hub.topNames())[0]?.[0] === 'Favorites' && (await hub.topNames())[0][1].length === 2)
+      const starred = await hub.topNames()
+      assert.deepEqual(starred, [['Favorites', ['transcription-menubar', 'monorepo']], ...before], 'Favorites is first, in sidebar order, and each group keeps its rows')
+      await until('tabs.json favorites', () => savedFavorites().length === 2)
+      assert.equal(await favoriteRow('monorepo').getAttribute('draggable'), null, 'a row in Favorites cannot be dragged')
+      assert.deepEqual(await cutLabels(hub), [], 'no label is cut beside a shown star')
+      await shot('sidebar-favorites.png')
+
+      await hub.shell().locator('#top .favorites .toggle').click()
+      await until('Favorites collapsed', async () => (await hub.topList())[0].collapsed)
+      await until('tabs.json collapse', () => (hub.saved() as { favoritesCollapsed?: boolean }).favoritesCollapsed === true)
+      assert.deepEqual((await hub.topNames()).slice(1), before, 'the groups keep the favorite rows')
+      await hub.shell().locator('#top .favorites .toggle').click()
+      await until('Favorites expanded', async () => !(await hub.topList())[0].collapsed)
+
+      await hub.shell().locator('#sidebar-toggle').click()
+      await until('the rail', async () => (await railItems(hub))[0] === '[Favorites]')
+      const rail = await railItems(hub)
+      await hub.shell().locator('#sidebar-toggle').click()
+      await until('the full sidebar', async () => (await shellState(hub)).width === SIDEBAR_WIDTH)
+
+      await favoriteRow('transcription-menubar').locator('.star').focus()
+      await hub.shell().keyboard.press('Space')
+      await until('one favorite', async () => (await hub.topNames())[0][1].length === 1)
+      const transcription = (await hub.topRows()).find(({ label }) => label === 'transcription-menubar')!.root
+      await until('focus on the star in the group', async () => (await hub.focusedInShell()) === `star:${transcription}`)
+      await favoriteRow('monorepo').locator('.star').click()
+      await until('no Favorites', async () => (await hub.topNames())[0][0] !== 'Favorites')
+      assert.deepEqual(await hub.topNames(), before)
+      await until('tabs.json without favorites', () => savedFavorites().length === 0)
+      return `Favorites: ${JSON.stringify(starred[0])}, above ${JSON.stringify(before)}. tabs.json held both favorites and the collapse. The rail began ${JSON.stringify(rail.slice(0, 3))}. Space on a star in Favorites moved focus to the star in the group. Screenshot sidebar-favorites.png`
+    })
+
     await check(section, 'the top row holds the window buttons, the logo, the name, and the terminal, search, and sidebar buttons, and moves the window', async () => {
       const lights = await hub.evaluate(({ BaseWindow }) => BaseWindow.getAllWindows()[0].getWindowButtonPosition(), null)
       const row = await hub.shell().evaluate(() => {
