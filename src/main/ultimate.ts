@@ -124,21 +124,21 @@ async function readLocks(log: Log): Promise<{ locks: Lock[]; sandboxes: SandboxL
   return { locks: locks.filter((lock) => lock !== null), sandboxes: sandboxes.filter((lock) => lock !== null) }
 }
 
-export const MAITE_UH_TOKEN_FILE = 'maite-uh.token'
+export const UH_TOKEN_FILE = 'uh.token'
 
 /**
- * The token that a privileged Maite matter's inbound guard asks of `uh`, from the home whose lock names the root and the
+ * The token that a guarded instance's inbound guard asks of `uh`, from the home whose lock names the root and the
  * port it runs on, the running Ultimate's own; a moved clone can leave an older home with the same root. No file means
  * no token. A file that is a link, of another user, or readable by others is refused, as the guard refuses it. Only `uh`
  * reads it: Hub's status poll never sends it. A sandbox has no local home, so it never gets a token.
  */
-export async function readMaiteToken(root: string, port: number, log: Log): Promise<string | undefined> {
+export async function readUhToken(root: string, port: number, log: Log): Promise<string | undefined> {
   const directory = projectsFolder()
   const entries = await readdir(directory, { withFileTypes: true }).catch(() => [])
   for (const { name } of entries.filter((entry) => entry.isDirectory())) {
     const lock = await readLock(join(directory, name, 'ultimate.lock'), parseLock, log)
     if (lock?.project !== root || lock.port !== port) continue
-    const path = join(directory, name, MAITE_UH_TOKEN_FILE)
+    const path = join(directory, name, UH_TOKEN_FILE)
     // One descriptor, opened without following a link, is checked and read, so the file cannot change in between.
     const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK).catch((error: NodeJS.ErrnoException) => {
       if (error.code === 'ENOENT') return null
@@ -276,8 +276,8 @@ const originOf = (port: number) => `http://127.0.0.1:${port}`
 
 type Call = { body?: object; origin?: boolean; timeout?: number; token?: string }
 
-/** `token` is the Maite matter's token for `uh`; its header goes only to the matter on loopback. */
-const tokenHeader = (token: string | undefined): Record<string, string> => (token === undefined ? {} : { 'X-Maite-Uh-Token': token })
+/** `token` is the instance's access token for `uh`; its header goes only to that instance on loopback. */
+const tokenHeader = (token: string | undefined): Record<string, string> => (token === undefined ? {} : { 'X-Uh-Token': token })
 
 async function call(port: number, path: string, { body, origin, timeout = API_TIMEOUT_MS, token }: Call = {}): Promise<string> {
   let response: Response
