@@ -11,6 +11,8 @@ User-visible changes to Ultimate Hub, in [Keep a Changelog](https://keepachangel
 
 ### Changed
 
+- Rename the per-instance `uh` access token file to `uh.token` and its header to `X-Uh-Token`. Extensions must use the new names; the old names are no longer supported.
+
 - Select another Ultimate's tab when a link points to it. (#7)
 - Build into `dist.noindex` so Spotlight shows only the installed app. (#8)
 

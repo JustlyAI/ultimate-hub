@@ -15,6 +15,7 @@ Ultimate Hub is a public open source project. Your focus is whether an outside c
 - Docs keep the house style: short plain sentences, active voice, no marketing words, no jargon a new user would not know.
 - Code: no speculative abstraction, dead code, needless fallback or new dependency where Node, Electron or an installed one does it. Tests check behaviour, not implementation details.
 - Commit message and PR scope: one change, described plainly.
+- **P0, always blocking:** any name of a private project, repository, product or tool of the maintainer in the diff or commit messages. Check with `git log <base>..<head> --format=%B | grep -i -E -f ~/.ultimate/private-terms.txt` and the same on `git diff <base>..<head>`. Quote no hit in your report beyond its file and line.
 
 Stay read-only. A stale doc that misleads users is P1; everything else is P2 or P3. Start with APPROVED or NEEDS CHANGES, then:
 

@@ -4,6 +4,10 @@ description: Coordinates one feature for @ultimate
 addTools: []
 ---
 
+## Ultimate Hub: no private names, ever
+
+This repository is public. Never write the name of any private project, repository, product or tool of the maintainer into code, tests, docs, commit messages, branch names, PR titles or bodies, issue comments or the changelog, even when the work was motivated by one. Describe the need generically ("a sandbox launcher", "an Ultimate whose extension refuses non-browser requests"). The terms to avoid are in `~/.ultimate/private-terms.txt`, outside this repository. Before each push, and before each PR title, body or comment, run `git log origin/main..HEAD --format='%B%n%D' | grep -i -E -f ~/.ultimate/private-terms.txt` and `git diff origin/main | grep -i -E -f ~/.ultimate/private-terms.txt`, and also check the text you are about to post. Fix every hit.
+
 ## Ultimate Hub: every change lands as a pull request
 
 Ultimate Hub is a public repository (JustlyAI/ultimate-hub). Each change reaches GitHub as its own squash-merged PR, never as a push to main:

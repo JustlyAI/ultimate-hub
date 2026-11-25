@@ -99,17 +99,17 @@ After `unknown_outcome` on a write, **do not send again** with the same key. Run
 
 Keys apply on **this machine only** (where `uh` runs).
 
-## Privileged Maite matters
+## Per-instance access token
 
-A privileged [Ultimate Maite](https://github.com/AIF-Of-Counsel/ultimate-maite) matter answers its API only to its own page and to `uh` with the matter's token. The other side of this rule is the matter's inbound guard (`maite-guardrails/uh-token.ts`) and top-maite's `docs/cli-contract.md`.
+An Ultimate whose extension refuses API requests that do not come from its own page can admit `uh` with a token. The extension must accept the header on the requests below; `uh` does not change its access rules.
 
-- The token is a file named **`maite-uh.token`** in the matter's project home (`~/.ultimate/projects/<name>-<hash>/`, the folder whose `ultimate.lock` names the root and the running port). It holds 64 hex characters, mode `0600`. The matter's owner creates it; `uh` never writes it.
-- When the file exists, `uh` sends it in the **`X-Maite-Uh-Token`** header with each request to that root, and to no other Ultimate. A file that is a link, of another user, or readable by group or others gives `internal`, and `uh` sends nothing.
-- The matter admits the token only on the requests `uh` makes: the status action, `GET /api/events` and its board subscription, new conversation, submit, and history. It audits each one, without the token or any content.
-- Without the file, or with a wrong token, the matter answers 403, and `uh` gives `protocol`.
-- Deleting the file revokes `uh`; writing a new token rotates it. Neither needs a restart.
-- Before Ultimate's batched subscriptions, `uh` used an older subscription path. A privileged matter does not admit it, so `read` and `wait` against a matter need a current Ultimate.
-- The Hub app's status poll never reads or sends the token (`src/main/ultimate.ts` `readMaiteToken`, called only from `src/cli/uh.ts`).
+- The token is a file named **`uh.token`** in the instance's project home (`~/.ultimate/projects/<name>-<hash>/`, the folder whose `ultimate.lock` names the root and the running port). Use 64 hex characters, mode `0600`. The instance's owner creates it; `uh` never writes it.
+- When the file exists, `uh` sends it in the **`X-Uh-Token`** header with each request to that root, and to no other Ultimate. A file that is a link, of another user, or readable by group or others gives `internal`, and `uh` sends nothing.
+- The extension needs to admit the token on the requests `uh` makes: the status action, `GET /api/events` and its board subscription, new conversation, submit, and history. It should never log the token or request content.
+- If the extension answers 403 for a missing or wrong token, `uh` gives `protocol`.
+- The extension should reread the file on each request so deleting it revokes access and writing a new token rotates it without a restart.
+- `uh` supports both older and batched subscription paths. An extension that admits only batched subscriptions needs a current Ultimate for `read` and `wait`.
+- The Hub app's status poll never reads or sends the token (`src/main/ultimate.ts` `readUhToken`, called only from `src/cli/uh.ts`).
 
 ## Known limits
 

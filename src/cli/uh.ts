@@ -9,7 +9,7 @@ import {
   createScanner,
   readAssistantMessages,
   readLive,
-  readMaiteToken,
+  readUhToken,
   readStatus,
   submit,
 } from '../main/ultimate.ts'
@@ -47,7 +47,7 @@ export function turnOf(conversation: Conversation, questions: OpenQuestion[], me
 }
 
 type Options = { key?: string; title?: string; timeout?: string }
-/** `token` is the privileged Maite matter's token for `uh`, absent for any other Ultimate. */
+/** `token` is the guarded instance's token for `uh`, absent for any other Ultimate. */
 type Input = { port: number; root: string; conversation: number; options: Options; stdin: () => Promise<string>; token?: string }
 type Spec = { positionals: number; options: (keyof Options)[]; run(input: Input): Promise<Record<string, unknown>> }
 
@@ -158,7 +158,7 @@ async function execute(argv: string[], stdin: () => Promise<string>): Promise<Re
   if (!instance) throw new Failure('not_running', `No running Ultimate has the root ${root}.`)
   let token: string | undefined
   try {
-    token = await readMaiteToken(root, instance.port, log)
+    token = await readUhToken(root, instance.port, log)
   } catch (error) {
     throw new Failure('internal', (error as Error).message)
   }
