@@ -3,6 +3,7 @@ node_modules/
 out/
 dist.noindex/
 .claude/worktrees/
+.ultimate/
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
 .pi/
