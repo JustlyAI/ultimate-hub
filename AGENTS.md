@@ -32,7 +32,7 @@ pnpm -s demo     # record the README demo in docs/demo from the packaged app and
 - `src/main/terminal.ts`: the terminal panel. It owns one `node-pty` shell for each tab, the shells' views, and the panel's size.
 - `src/main/index.ts`: the window, menu, scan loop, log, and the native menus that the shell asks for. While search or a question is open, it puts the shell view above the pages and the terminal panel.
 - `src/shared/menu.ts`: the types of a native menu and of a question that cross IPC.
-- `src/preload/index.ts` and `src/renderer/`: the sidebar, the messages, and the panel's drag handle. `src/renderer/name-dialog.ts` is the group name dialog, `src/renderer/sheet.ts` is the question dialog over the whole window, `src/renderer/search.ts` is the search panel, and `src/renderer/rail.ts` is the tiles of the hidden sidebar.
+- `src/preload/index.ts` and `src/renderer/`: the sidebar, the messages, and the panel's drag handle. `src/renderer/name-dialog.ts` is the group name dialog, `src/renderer/sheet.ts` is the question dialog over the whole window, `src/renderer/search.ts` is the search panel, `src/renderer/reveal.ts` scrolls a list to the selected tab, and `src/renderer/rail.ts` is the tiles of the hidden sidebar.
 - `src/preload/terminal.ts` and `src/renderer/terminal.ts`: the xterm.js screen of one shell.
 - `scripts/demo.ts` and `scripts/demo-render.mjs`: the README demo. `demo.ts` drives the app and captures frames, and `demo-render.mjs` runs in Electron, draws the cursor and captions, and pipes frames to ffmpeg. It needs `ffmpeg` on `PATH`.
 - `test/`, `scripts/verify.ts`, `scripts/verify-uh.ts`, `scripts/measure-startup.ts`, and `scripts/measure-status.ts`: the proof.

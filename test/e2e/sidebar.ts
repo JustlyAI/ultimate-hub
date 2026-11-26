@@ -388,4 +388,84 @@ export async function runSidebarChecks(check: Check) {
     await hub.quit()
     for (const stub of stubs) await stub.stop()
   }
+  await favoriteScrollCheck(check, section)
+}
+
+/** A favorite has two rows, so a list that is long enough to scroll shows which one a selection scrolls to. */
+async function favoriteScrollCheck(check: Check, section: string) {
+  const home = tempDir('home')
+  const projects = tempDir('projects')
+  const names = Array.from({ length: 32 }, (_, index) => `project-${String(index + 1).padStart(2, '0')}`)
+  const stubs: Stub[] = []
+  for (const name of names) {
+    mkdirSync(join(projects, name), { recursive: true })
+    stubs.push(await startStub(home, join(projects, name)))
+  }
+  const hub = await Hub.launch(home, tempDir('data'))
+  try {
+    await check(section, 'a selected favorite does not move a list that shows one of its rows, and with none on screen the list shows the row in its own place, also in the rail', async () => {
+      await until('all tabs', async () => (await hub.topRows()).length === names.length)
+      const root = (name: string) => join(projects, name)
+      const at = (key: string, name: string) => hub.shell().locator(`[data-focus="${key}:${root(name)}"]`)
+      const selected = (name: string) => until(`${name} selected`, () => hub.shell().evaluate((root) => document.querySelector<HTMLElement>('#top .tab[aria-selected="true"]')?.dataset.root === root, root(name)))
+      const scrollTop = (list: string) => hub.shell().locator(list).evaluate((element) => Math.round(element.scrollTop))
+      // 0 is the start of the list, 1 is its end.
+      const scrollTo = (list: string, part: number) => hub.shell().locator(list).evaluate((element, part) => (element.scrollTop = (element.scrollHeight - element.clientHeight) * part), part)
+      const onScreen = (list: string, key: string, name: string) =>
+        at(key, name).evaluate((row, list) => {
+          const box = document.querySelector(list)!.getBoundingClientRect()
+          const { top, bottom, height } = row.getBoundingClientRect()
+          return height > 0 && top >= box.top - 1 && bottom <= box.bottom + 1
+        }, list)
+      const nextTab = async (name: string) => {
+        await hub.keyTo('sidebar', 'Tab', ['control'])
+        await selected(name)
+      }
+      const results: Record<string, boolean> = {}
+      const stays = async (what: string, list: string, key: string, name: string) => {
+        const before = await scrollTop(list)
+        await (list === '#top' ? at(key, name).locator('.label') : at(key, name)).click()
+        await selected(name)
+        results[what] = (await scrollTop(list)) === before
+      }
+
+      await at('star', 'project-31').click()
+      await until('one favorite', () => at('fav:row', 'project-31').count())
+      for (const [view, list, own, copy] of [['sidebar', '#top', 'row', 'fav:row'], ['rail', '#rail', 'rail', 'fav:rail']]) {
+        const select = (name: string) => (list === '#top' ? at(own, name).locator('.label') : at(own, name)).click()
+        await select('project-01')
+        await selected('project-01')
+        await scrollTo(list, 1)
+        await stays(`${view}: a click on the own row keeps the list`, list, own, 'project-31')
+        await select('project-01')
+        await selected('project-01')
+        await scrollTo(list, 0)
+        await stays(`${view}: a click on the copy keeps the list`, list, copy, 'project-31')
+        await select('project-30')
+        await selected('project-30')
+        await scrollTo(list, 0.5)
+        assert.ok(!(await onScreen(list, own, 'project-31')) && !(await onScreen(list, copy, 'project-31')), `${view}: neither row is on screen before the key`)
+        await nextTab('project-31')
+        results[`${view}: from off screen the list shows the own row`] = await onScreen(list, own, 'project-31')
+        if (list === '#top') {
+          await hub.shell().locator('#top .favorites .toggle').click()
+          await until('Favorites collapsed', async () => (await hub.topList())[0].collapsed)
+          await select('project-30')
+          await selected('project-30')
+          await scrollTo(list, 0)
+          await nextTab('project-31')
+          results[`${view}: with Favorites collapsed the list shows the own row`] = await onScreen(list, own, 'project-31')
+          await hub.shell().locator('#top .favorites .toggle').click()
+          await until('Favorites expanded', async () => !(await hub.topList())[0].collapsed)
+          await hub.shell().locator('#sidebar-toggle').click()
+          await until('the rail', async () => (await shellState(hub)).width === RAIL_WIDTH)
+        }
+      }
+      assert.deepEqual(Object.entries(results).filter(([, ok]) => !ok).map(([what]) => what), [])
+      return Object.keys(results).join('. ')
+    })
+  } finally {
+    await hub.quit()
+    for (const stub of stubs) await stub.stop()
+  }
 }

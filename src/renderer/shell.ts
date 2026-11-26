@@ -19,6 +19,7 @@ import {
 import { askName } from './name-dialog'
 import { showSheet } from './sheet'
 import { renderRail, revealRailSelection } from './rail'
+import { reveal } from './reveal'
 import { openSearch, refreshSearch } from './search'
 
 declare const hub: Hub
@@ -228,18 +229,14 @@ function showMessage(main: MainArea) {
 function revealNewSelection(view: Sidebar) {
   const selected = [...view.groups.flatMap(({ rows }) => rows), ...view.ungrouped].find((row) => row.selected)?.root
   if (selected === revealed) return
-  for (const list of [top, status]) list.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' })
+  for (const list of [top, status]) reveal(list, list.querySelectorAll<HTMLElement>('[aria-selected="true"]'))
   revealRailSelection()
   revealed = selected
 }
 
 function revealPending() {
   if (pendingRevealRoot === null) return
-  const rows = top.querySelectorAll<HTMLElement>(`.tab[data-root="${CSS.escape(pendingRevealRoot)}"]`)
-  const row = [...rows].find((candidate) => !candidate.closest('[hidden]'))
-  if (!row) return
-  row.scrollIntoView({ block: 'nearest' })
-  pendingRevealRoot = null
+  if (reveal(top, top.querySelectorAll<HTMLElement>(`.tab[data-root="${CSS.escape(pendingRevealRoot)}"]`))) pendingRevealRoot = null
 }
 
 function focusKey(key: string, scroll: boolean): boolean {

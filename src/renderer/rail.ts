@@ -1,5 +1,6 @@
 import type { Hub } from '../preload'
 import { STATUS_ORDER, type Row, type RowLifecycle, type Sidebar, type StatusKind } from '../shared/tabs'
+import { reveal } from './reveal'
 
 declare const hub: Hub
 
@@ -47,7 +48,7 @@ export function renderRail(view: Sidebar) {
 }
 
 export function revealRailSelection() {
-  list.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' })
+  reveal(list, list.querySelectorAll<HTMLElement>('[aria-selected="true"]'))
 }
 
 /** Two letters for a tile: the first letters of the first two words, or the first two letters of one word. */
