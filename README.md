@@ -31,6 +31,7 @@ To update, run `git pull` and `pnpm dist`, quit the app, and run the `ditto` and
 
 - **Finds each Ultimate.** Start an Ultimate, and its tab appears within about two seconds. Start it with `ultimate --no-open`, or set `ULTIMATE_NO_OPEN=1`, so that it does not also open a Chrome window.
 - **Groups.** Click `+`, then **Group**. Drag a tab onto a group to move it there. Click a group's name to show or hide its tabs.
+- **Favorites.** Click the star on a row. The tab stays in its group, and it shows again in **Favorites** above the groups. Click **Favorites** to show or hide its tabs.
 - **Sorting.** Drag tabs and groups into any order in the **Ultimates** list. Names, groups, and order follow the project folder, so they stay when a project returns on a different port.
 - **Status.** The **Status** list sorts the running tabs by what each Ultimate reports: **Needs You**, **Failed**, **Working**, **Done**, **Idle**, or **Unknown**. When you hide the sidebar, the strip that stays shows each tab with a status dot. Hub asks each Ultimate every 5 seconds.
 - **Terminal.** `` Ctrl+` `` opens a shell in the selected project's folder. Each tab keeps its own shell.

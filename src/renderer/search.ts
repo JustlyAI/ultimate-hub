@@ -14,7 +14,7 @@ const count = dialog.querySelector<HTMLElement>('#search-count')!
 
 type Ending = { cancelled(): void; chosen(root: string): void }
 
-let sidebar: Sidebar = { form: 'full', groups: [], ungrouped: [], status: [] }
+let sidebar: Sidebar = { form: 'full', favorites: { collapsed: false, status: null, rows: [] }, groups: [], ungrouped: [], status: [] }
 let results: SearchResult[] = []
 let active: string | null = null
 let ending: Ending | null = null

@@ -35,8 +35,8 @@ const [A, B, C, D] = ['/p/alpha', '/p/beta', '/p/gamma', '/p/delta']
 const NOW = 1000
 
 const live = (root: string, port: number): Instance => ({ root, port })
-const saved = (root: string, name: string | null = null, groupId: GroupId | null = null): SavedTab => ({ root, name, groupId, lifecycle: null })
-const savedOf = (...tabs: SavedTab[]): Saved => ({ groups: [], tabs, zoom: 1, sidebar: 'full' })
+const saved = (root: string, name: string | null = null, groupId: GroupId | null = null): SavedTab => ({ root, name, groupId, lifecycle: null, favorite: false })
+const savedOf = (...tabs: SavedTab[]): Saved => ({ groups: [], tabs, zoom: 1, sidebar: 'full', favoritesCollapsed: false })
 const scan = (...instances: Instance[]): Command => ({ type: 'scan', instances, fresh: true })
 const notRunning = (root: string, label: string): MainArea => ({ kind: 'message', root, label, lifecycle: 'stopped', error: null })
 const run = (state: TabsState, ...commands: Command[]) => commands.reduce((next, command) => reduce(next, command, NOW), state)
@@ -51,10 +51,10 @@ const statusList = (state: TabsState) => sidebarOf(state).status.map(({ label, r
 test('running projects appear with the folder name and the first one is selected', () => {
   const state = start(scan(live(A, 4747), live(B, 4748)))
   const rows = [
-    { root: A, label: 'alpha', port: 4747, selected: true, lifecycle: 'running', status: 'unknown', error: null },
-    { root: B, label: 'beta', port: 4748, selected: false, lifecycle: 'running', status: 'unknown', error: null },
+    { root: A, label: 'alpha', port: 4747, selected: true, lifecycle: 'running', status: 'unknown', error: null, favorite: false },
+    { root: B, label: 'beta', port: 4748, selected: false, lifecycle: 'running', status: 'unknown', error: null, favorite: false },
   ]
-  assert.deepEqual(sidebarOf(state), { form: 'full', groups: [], ungrouped: rows, status: [{ kind: 'unknown', label: 'Unknown', rows }] })
+  assert.deepEqual(sidebarOf(state), { form: 'full', favorites: { collapsed: false, status: null, rows: [] }, groups: [], ungrouped: rows, status: [{ kind: 'unknown', label: 'Unknown', rows }] })
   assert.deepEqual(mainOf(state), { kind: 'page', root: A, port: 4747 })
 })
 
@@ -74,8 +74,8 @@ test('named tabs dim when the project stops, and do not lose their name', () => 
     scan(live(A, 4747)),
   )
   assert.deepEqual(sidebarOf(state).ungrouped, [
-    { root: A, label: 'alpha', port: 4747, selected: true, lifecycle: 'running', status: 'unknown', error: null },
-    { root: B, label: 'Website', port: null, selected: false, lifecycle: 'stopped', status: null, error: null },
+    { root: A, label: 'alpha', port: 4747, selected: true, lifecycle: 'running', status: 'unknown', error: null, favorite: false },
+    { root: B, label: 'Website', port: null, selected: false, lifecycle: 'stopped', status: null, error: null, favorite: false },
   ])
   assert.deepEqual(statusList(state), [['Unknown', ['alpha']]], 'a dimmed tab has no status row')
 })
@@ -87,7 +87,7 @@ test('an unnamed tab that is not selected leaves the list when its project stops
 
 test('an unnamed selected tab stays dimmed until another tab is selected', () => {
   const dimmed = start(scan(live(A, 4747), live(B, 4748)), scan(live(B, 4748)))
-  assert.deepEqual(sidebarOf(dimmed).ungrouped[0], { root: A, label: 'alpha', port: null, selected: true, lifecycle: 'stopped', status: null, error: null })
+  assert.deepEqual(sidebarOf(dimmed).ungrouped[0], { root: A, label: 'alpha', port: null, selected: true, lifecycle: 'stopped', status: null, error: null, favorite: false })
   assert.deepEqual(statusList(dimmed), [['Unknown', ['beta']]], 'a dimmed selected tab has no status row')
   assert.deepEqual(mainOf(dimmed), notRunning(A, 'alpha'))
   assert.deepEqual(labels(run(dimmed, { type: 'select', root: B })), ['beta'])
@@ -126,7 +126,7 @@ test('a project that returns on a new port keeps its name and position', () => {
     scan(live(B, 4748)),
     scan(live(A, 5000), live(B, 4748)),
   )
-  assert.deepEqual(sidebarOf(state).ungrouped[0], { root: A, label: 'Website', port: 5000, selected: true, lifecycle: 'running', status: 'unknown', error: null })
+  assert.deepEqual(sidebarOf(state).ungrouped[0], { root: A, label: 'Website', port: 5000, selected: true, lifecycle: 'running', status: 'unknown', error: null, favorite: false })
   assert.equal(kindOf(state, A), 'unknown')
   assert.deepEqual(mainOf(state), { kind: 'page', root: A, port: 5000 })
 })
@@ -250,8 +250,8 @@ test('a port that passes between projects follows each root, never the port', ()
     scan(live(B, 4747)),
   )
   assert.deepEqual(sidebarOf(state).ungrouped, [
-    { root: A, label: 'Website', port: null, selected: true, lifecycle: 'stopped', status: null, error: null },
-    { root: B, label: 'beta', port: 4747, selected: false, lifecycle: 'running', status: 'unknown', error: null },
+    { root: A, label: 'Website', port: null, selected: true, lifecycle: 'stopped', status: null, error: null, favorite: false },
+    { root: B, label: 'beta', port: 4747, selected: false, lifecycle: 'running', status: 'unknown', error: null, favorite: false },
   ])
   assert.deepEqual(statusList(state), [['Unknown', ['beta']]])
   assert.deepEqual(mainOf(state), notRunning(A, 'Website'))
@@ -348,7 +348,7 @@ test('an empty status has no section, and each section counts its rows', () => {
     sidebarOf(state).status.map(({ label, rows }) => [label, rows.length]),
     [['Working', 2], ['Unknown', 1]],
   )
-  assert.deepEqual(sidebarOf(initialState(savedOf())), { form: 'full', groups: [], ungrouped: [], status: [] })
+  assert.deepEqual(sidebarOf(initialState(savedOf())), { form: 'full', favorites: { collapsed: false, status: null, rows: [] }, groups: [], ungrouped: [], status: [] })
 })
 
 test('a move across statuses reorders the top list', () => {
@@ -451,7 +451,7 @@ test('a stopped tab has no status row, and a tab that returns is Unknown until i
     scan(live(A, 1)),
   )
   assert.equal(kindOf(stopped, B), undefined)
-  assert.deepEqual(sidebarOf(stopped).ungrouped.find(({ root }) => root === B), { root: B, label: 'Website', port: null, selected: false, lifecycle: 'stopped', status: null, error: null })
+  assert.deepEqual(sidebarOf(stopped).ungrouped.find(({ root }) => root === B), { root: B, label: 'Website', port: null, selected: false, lifecycle: 'stopped', status: null, error: null, favorite: false })
   assert.equal(kindOf(run(stopped, scan(live(A, 1), live(B, 2))), B), 'unknown')
 })
 
@@ -595,8 +595,8 @@ test('removing a group moves its tabs to the end of Ungrouped in their order, an
 test('an unnamed tab in a group stays dimmed in its place when it stops, and leaves the list once it is ungrouped and not selected', () => {
   const state = start(fourLive, create(G1, 'Product'), toGroup(B, G1), toGroup(C, G1), scan(live(A, 1), live(C, 3), live(D, 4)))
   assert.deepEqual(groupView(state, G1).rows, [
-    { root: B, label: 'beta', port: null, selected: false, lifecycle: 'stopped', status: null, error: null },
-    { root: C, label: 'gamma', port: 3, selected: false, lifecycle: 'running', status: 'unknown', error: null },
+    { root: B, label: 'beta', port: null, selected: false, lifecycle: 'stopped', status: null, error: null, favorite: false },
+    { root: C, label: 'gamma', port: 3, selected: false, lifecycle: 'running', status: 'unknown', error: null, favorite: false },
   ])
   assert.equal(groupView(state, G1).count, 2, 'the count holds live and dimmed rows')
   assert.equal(kindOf(state, B), undefined, 'a dimmed tab in a group has no status row')
@@ -648,14 +648,14 @@ test('selecting a tab expands its group, and scans, status answers, and the firs
   assert.equal(run(grouped, pick(C)).saved.groups[0].collapsed, false, 'select reveals')
   const quiet = run(grouped, fourLive, status(C, 3, { questions: 1 }), scan(live(A, 1), live(B, 2), live(D, 4)), fourLive)
   assert.equal(quiet.saved.groups[0].collapsed, true)
-  const first = run(initialState({ groups: [{ id: G1, name: 'Product', collapsed: true }], tabs: [saved(C, null, G1), saved(A)], zoom: 1, sidebar: 'full' }), scan(live(C, 3)))
+  const first = run(initialState({ groups: [{ id: G1, name: 'Product', collapsed: true }], tabs: [saved(C, null, G1), saved(A)], zoom: 1, sidebar: 'full', favoritesCollapsed: false }), scan(live(C, 3)))
   assert.equal(selectedRoot(first), C, 'the only live tab is selected')
   assert.equal(first.saved.groups[0].collapsed, true, 'and its group stays collapsed')
 })
 
 test('the first selection is the first live row on screen, past a collapsed group', () => {
   const groups = [{ id: G1, name: 'Product', collapsed: false }, { id: G2, name: 'Tools', collapsed: true }]
-  const saved3 = { groups, tabs: [saved(A), saved(B, null, G2), saved(C, null, G1)], zoom: 1, sidebar: 'full' as const }
+  const saved3 = { groups, tabs: [saved(A), saved(B, null, G2), saved(C, null, G1)], zoom: 1, sidebar: 'full' as const, favoritesCollapsed: false }
   assert.equal(selectedRoot(run(initialState(saved3), scan(live(A, 1), live(B, 2), live(C, 3)))), C, 'groups come before Ungrouped')
   assert.equal(selectedRoot(run(initialState(saved3), scan(live(A, 1), live(B, 2)))), A, 'a visible row before a row in a collapsed group')
 })
@@ -709,7 +709,7 @@ test('tabs.json must be { groups, tabs }: the old array is corrupt, and a groupI
     groups: [{ id: 'g-one', name: 'Product', collapsed: true }],
     tabs: [{ root: A, name: null, groupId: 'g-one' }, { root: B, name: 'Website', groupId: null }, { root: C, name: null, groupId: 'g-gone' }],
   }
-  assert.deepEqual(parseSaved(good), { groups: good.groups, tabs: [saved(A, null, G1), saved(B, 'Website'), saved(C)], zoom: 1, sidebar: 'full' })
+  assert.deepEqual(parseSaved(good), { groups: good.groups, tabs: [saved(A, null, G1), saved(B, 'Website'), saved(C)], zoom: 1, sidebar: 'full', favoritesCollapsed: false })
   assert.deepEqual(parseSaved({ groups: [], tabs: [] }), savedOf())
   for (const bad of [[{ root: A, name: null }], [], null, 3, {}, { groups: [] }, { tabs: [] }, { groups: [{ id: 'g', name: 'x' }], tabs: [] }, { groups: [], tabs: [{ root: A, name: null }] }, { groups: [], tabs: [{ root: 1, name: null, groupId: null }] }])
     assert.throws(() => parseSaved(bad), `should reject ${JSON.stringify(bad)}`)
@@ -739,9 +739,9 @@ test('the zoom command changes only the saved zoom, and survives a save and relo
 })
 
 test('tabs.json without zoom, or with a bad zoom, reads as actual size and keeps its tabs', () => {
-  const tabs = [{ root: A, name: 'Website', groupId: null, lifecycle: null }]
+  const tabs = [{ root: A, name: 'Website', groupId: null, lifecycle: null, favorite: false }]
   for (const zoom of [undefined, null, '1.5', 0, 0.1, 6, Number.NaN, {}])
-    assert.deepEqual(parseSaved({ groups: [], tabs, zoom }), { groups: [], tabs, zoom: 1, sidebar: 'full' }, `zoom ${String(zoom)}`)
+    assert.deepEqual(parseSaved({ groups: [], tabs, zoom }), { groups: [], tabs, zoom: 1, sidebar: 'full', favoritesCollapsed: false }, `zoom ${String(zoom)}`)
   assert.equal(parseSaved({ groups: [], tabs, zoom: 0.25 }).zoom, 0.25)
   assert.equal(parseSaved({ groups: [], tabs, zoom: 5 }).zoom, 5)
 })
@@ -760,10 +760,49 @@ test('toggle-sidebar changes only the saved form, shows in the sidebar view, and
 })
 
 test('tabs.json without a sidebar form, or with a bad one, reads as full and keeps its tabs', () => {
-  const tabs = [{ root: A, name: 'Website', groupId: null, lifecycle: null }]
+  const tabs = [{ root: A, name: 'Website', groupId: null, lifecycle: null, favorite: false }]
   for (const sidebar of [undefined, null, 'hidden', true, 40, {}])
-    assert.deepEqual(parseSaved({ groups: [], tabs, zoom: 1, sidebar }), { groups: [], tabs, zoom: 1, sidebar: 'full' }, `sidebar ${String(sidebar)}`)
+    assert.deepEqual(parseSaved({ groups: [], tabs, zoom: 1, sidebar }), { groups: [], tabs, zoom: 1, sidebar: 'full', favoritesCollapsed: false }, `sidebar ${String(sidebar)}`)
   assert.equal(parseSaved({ groups: [], tabs, zoom: 1, sidebar: 'rail' }).sidebar, 'rail')
+})
+
+const favorite = (root: string, on = true): Command => ({ type: 'favorite', root, favorite: on })
+const favoriteRoots = (state: TabsState) => sidebarOf(state).favorites.rows.map(({ root }) => root)
+
+test('a favorite stays in its group or in Ungrouped, and shows again in Favorites in sidebar order', () => {
+  const state = run(start(fourLive, create(G1, 'Product'), toGroup(C, G1)), favorite(B), favorite(C))
+  assert.deepEqual(favoriteRoots(state), [C, B], 'the group rows come before Ungrouped')
+  assert.deepEqual(topList(state), [['Product', ['gamma']], ['Ungrouped', ['alpha', 'beta', 'delta']]])
+  assert.equal(sidebarOf(state).groups[0].rows[0].favorite, true)
+  assert.deepEqual(favoriteRoots(run(state, favorite(C, false))), [B])
+  assert.deepEqual(favoriteRoots(run(state, favorite('/p/none'))), [C, B], 'an unknown root changes nothing')
+})
+
+test('Favorites collapses on its own, takes the most urgent status of its rows, and never moves the selection', () => {
+  const state = run(start(fourLive, status(B, 2, { questions: 1 }), status(C, 3, { busy: 1 })), favorite(C), favorite(B))
+  assert.equal(sidebarOf(state).favorites.status, 'needs-you')
+  const collapsed = run(state, { type: 'collapse-favorites', collapsed: true })
+  assert.equal(sidebarOf(collapsed).favorites.collapsed, true)
+  assert.deepEqual(favoriteRoots(collapsed), [B, C], 'collapsed Favorites keeps its rows')
+  assert.equal(collapsed.selected, state.selected)
+  assert.equal(run(collapsed, { type: 'select', root: B }).saved.favoritesCollapsed, true, 'a selection does not expand Favorites')
+})
+
+test('a stopped favorite keeps its row, and favorites and collapse survive a save and reload', () => {
+  const state = run(start(scan(live(A, 1), live(B, 2))), favorite(B), { type: 'collapse-favorites', collapsed: true }, scan(live(A, 1)))
+  assert.deepEqual(labels(state), ['alpha', 'beta'])
+  const after = run(initialState(parseSaved(JSON.parse(JSON.stringify(state.saved)))), scan(live(A, 1)))
+  assert.deepEqual(after.saved, state.saved)
+  assert.deepEqual(favoriteRoots(after), [B])
+})
+
+test('tabs.json without favorite fields, or with bad ones, reads as no favorites and keeps its tabs', () => {
+  for (const value of [undefined, null, 'yes', 1, {}])
+    assert.deepEqual(
+      parseSaved({ groups: [], tabs: [{ root: A, name: 'Website', groupId: null, favorite: value }], favoritesCollapsed: value }),
+      savedOf(saved(A, 'Website')),
+      `favorite ${String(value)}`,
+    )
 })
 
 const [CLIENTS, TOOLS] = ['g-clients', 'g-tools'] as GroupId[]
@@ -929,7 +968,7 @@ const add = (root: string, launcher: typeof LAUNCHER | null = LAUNCHER): Command
 test('add: a new stopped project goes to the end of Ungrouped, selected, with the record that Play starts from', () => {
   const state = run(start(scan(live(A, 1))), { type: 'create-group', id: 'g' as GroupId, name: 'Work' }, { type: 'move-to-group', root: A, groupId: 'g' as GroupId }, add(D))
   assert.equal(state.selected, D)
-  assert.deepEqual(state.saved.tabs.at(-1), { root: D, name: null, groupId: null, lifecycle: { kind: 'paused', launcher: LAUNCHER } })
+  assert.deepEqual(state.saved.tabs.at(-1), { root: D, name: null, groupId: null, lifecycle: { kind: 'paused', launcher: LAUNCHER }, favorite: false })
   assert.deepEqual(sidebarOf(state).ungrouped.map((row) => [row.label, row.lifecycle]), [['delta', 'paused']])
   assert.equal(run(state, act(D, 'play')).operations[D]?.action, 'play', 'Play accepts it')
 })
@@ -952,7 +991,7 @@ test('add: a running project is only selected, and its collapsed group opens', (
 test('add: a known project keeps its name, group, and place, and a busy or recorded one keeps its record', () => {
   const named = run(start(scan(live(A, 1), live(B, 2))), { type: 'rename', root: A, name: 'Site' }, scan(live(B, 2)))
   const state = run(named, add(A))
-  assert.deepEqual(state.saved.tabs[0], { root: A, name: 'Site', groupId: null, lifecycle: { kind: 'paused', launcher: LAUNCHER } })
+  assert.deepEqual(state.saved.tabs[0], { root: A, name: 'Site', groupId: null, lifecycle: { kind: 'paused', launcher: LAUNCHER }, favorite: false })
   const other = { node: '/other/node', entry: '/other/bin/ultimate.ts' }
   assert.deepEqual(recordOf(run(paused(), add(B, other)), B), { kind: 'paused', launcher: LAUNCHER }, 'a paused record stays')
   assert.equal(recordOf(run(pausing(), add(B, other)), B)?.kind, 'paused', 'an operation keeps its record')
@@ -963,7 +1002,7 @@ test('lifecycle: a stopped pause shows play, keeps an unnamed unselected row in 
   const state = paused()
   assert.equal(state.operations[B], undefined)
   assert.deepEqual(labels(state), ['alpha', 'beta', 'gamma'])
-  assert.deepEqual(rowOf(state, B), { root: B, label: 'beta', port: null, selected: false, lifecycle: 'paused', status: null, error: null })
+  assert.deepEqual(rowOf(state, B), { root: B, label: 'beta', port: null, selected: false, lifecycle: 'paused', status: null, error: null, favorite: false })
   assert.equal(selectedLabel(state), 'alpha', 'the selection did not move')
   const reopened = run(initialState(parseSaved(JSON.parse(JSON.stringify(state.saved)))), scan(live(A, 1), live(C, 3)))
   assert.deepEqual(labels(reopened), ['alpha', 'beta', 'gamma'])
@@ -988,13 +1027,13 @@ test('lifecycle: play ends with the record cleared, and the selection never chan
   const done = run(running, { type: 'lifecycle-started', root: B, id: play })
   assert.equal(recordOf(done, B), null)
   assert.equal(done.operations[B], undefined)
-  assert.deepEqual(rowOf(done, B), { root: B, label: 'beta', port: 7, selected: false, lifecycle: 'running', status: 'unknown', error: null })
+  assert.deepEqual(rowOf(done, B), { root: B, label: 'beta', port: 7, selected: false, lifecycle: 'running', status: 'unknown', error: null, favorite: false })
   assert.equal(selectedLabel(done), 'gamma')
 })
 
 test('lifecycle: a confirmed close removes the tab, keeps its empty group, and moves the selection to the next row, then the previous', () => {
   const groups = [{ id: G1, name: 'Product', collapsed: false }]
-  const base = run(initialState({ groups, tabs: [saved(A), saved(B, null, G1), saved(C)], zoom: 1, sidebar: 'full' }), scan(live(A, 1), live(B, 2), live(C, 3)))
+  const base = run(initialState({ groups, tabs: [saved(A), saved(B, null, G1), saved(C)], zoom: 1, sidebar: 'full', favoritesCollapsed: false }), scan(live(A, 1), live(B, 2), live(C, 3)))
   const close = id('close-/p/beta')
   const onB = run(base, { type: 'select', root: B }, act(B, 'close'), confirmed(B, close, null), scan(live(A, 1), live(C, 3)))
   assert.equal(rowOf(onB, B)?.lifecycle, 'closing', 'the row stays until the exit is proven')
@@ -1014,7 +1053,7 @@ test('lifecycle: a close whose root runs again keeps the row, clears the record,
   const close = id('close-/p/beta')
   const state = run(start(scan(live(A, 1), live(B, 2))), act(B, 'close'), confirmed(B, close, null), scan(live(A, 1), live(B, 5)), stopped(B, close, true))
   assert.equal(recordOf(state, B), null)
-  assert.deepEqual(rowOf(state, B), { root: B, label: 'beta', port: 5, selected: false, lifecycle: 'running', status: 'unknown', error: INSTANCE_CHANGED })
+  assert.deepEqual(rowOf(state, B), { root: B, label: 'beta', port: 5, selected: false, lifecycle: 'running', status: 'unknown', error: INSTANCE_CHANGED, favorite: false })
   assert.equal(run(state, act(B, 'pause', id('next'))).errors[B], undefined, 'the next action clears the error')
 })
 

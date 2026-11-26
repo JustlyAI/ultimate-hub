@@ -21,13 +21,13 @@ function parseLifecycle(value: unknown): Lifecycle | null {
 }
 
 function parseTab(value: unknown, groups: ReadonlySet<string>): SavedTab {
-  const { root, name, groupId, lifecycle } = value as SavedTab
+  const { root, name, groupId, lifecycle, favorite } = value as SavedTab
   if (typeof root !== 'string' || (name !== null && typeof name !== 'string') || (groupId !== null && typeof groupId !== 'string'))
     throw new Error(`bad saved tab: ${JSON.stringify(value)}`)
-  return { root, name, groupId: groupId !== null && groups.has(groupId) ? groupId : null, lifecycle: parseLifecycle(lifecycle) }
+  return { root, name, groupId: groupId !== null && groups.has(groupId) ? groupId : null, lifecycle: parseLifecycle(lifecycle), favorite: favorite === true }
 }
 
-// A bad zoom or sidebar value must not cost the user their names and groups, so each reads as its default.
+// A bad zoom, sidebar, or favorite value must not cost the user their names and groups, so each reads as its default.
 const parseZoom = (value: unknown) =>
   typeof value === 'number' && value >= ZOOM_STEPS[0] && value <= ZOOM_STEPS.at(-1)! ? value : 1
 
@@ -35,11 +35,11 @@ const parseSidebar = (value: unknown): SidebarForm => (value === 'rail' ? 'rail'
 
 /** The array that the app saved before user groups is not this shape, so it reads as corrupt. */
 export function parseSaved(value: unknown): Saved {
-  const { groups, tabs, zoom, sidebar } = (value ?? {}) as { groups?: unknown; tabs?: unknown; zoom?: unknown; sidebar?: unknown }
+  const { groups, tabs, zoom, sidebar, favoritesCollapsed } = (value ?? {}) as { groups?: unknown; tabs?: unknown; zoom?: unknown; sidebar?: unknown; favoritesCollapsed?: unknown }
   if (!Array.isArray(groups) || !Array.isArray(tabs)) throw new Error('not { groups, tabs }')
   const parsed = groups.map(parseGroup)
   const ids = new Set<string>(parsed.map(({ id }) => id))
-  return { groups: parsed, tabs: tabs.map((tab) => parseTab(tab, ids)), zoom: parseZoom(zoom), sidebar: parseSidebar(sidebar) }
+  return { groups: parsed, tabs: tabs.map((tab) => parseTab(tab, ids)), zoom: parseZoom(zoom), sidebar: parseSidebar(sidebar), favoritesCollapsed: favoritesCollapsed === true }
 }
 
 export function loadSaved(path: string, log: (line: string) => void): Saved {
@@ -47,7 +47,7 @@ export function loadSaved(path: string, log: (line: string) => void): Saved {
     return parseSaved(JSON.parse(readFileSync(path, 'utf8')))
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') log(`tabs.json: ${String(error)}`)
-    return { groups: [], tabs: [], zoom: 1, sidebar: 'full' }
+    return { groups: [], tabs: [], zoom: 1, sidebar: 'full', favoritesCollapsed: false }
   }
 }
 

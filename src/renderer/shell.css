@@ -440,6 +440,11 @@ button:focus-visible,
   color: #8b919e;
 }
 
+/* Favorites has no menu, so the space of one keeps its count in line with the other counts. */
+.favorites .group-header {
+  padding-right: 26px;
+}
+
 .group-header.drop-into {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
@@ -644,6 +649,7 @@ button:focus-visible,
   text-align: center;
 }
 
+.star,
 .life,
 .row-menu {
   display: grid;
@@ -659,15 +665,30 @@ button:focus-visible,
   height: 28px;
 }
 
-.row-menu {
+.row-menu,
+.star {
   width: 20px;
   height: 28px;
 }
 
+.star[aria-pressed='false'] {
+  opacity: 0;
+}
+
+.tab:hover .star,
+.star:focus-visible {
+  opacity: 1;
+}
+
 .life:hover:not(:disabled),
-.row-menu:hover {
+.row-menu:hover,
+.star:hover {
   background: #262a33;
   color: #d7dae0;
+}
+
+.star[aria-pressed='true'] {
+  color: #f0b849;
 }
 
 .life.play {

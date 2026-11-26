@@ -1,5 +1,6 @@
 import type { Hub } from '../preload'
-import { STATUS_ORDER, type GroupView, type Row, type RowLifecycle, type Sidebar, type StatusKind } from '../shared/tabs'
+import { STATUS_ORDER, type Row, type RowLifecycle, type Sidebar, type StatusKind } from '../shared/tabs'
+import { reveal } from './reveal'
 
 declare const hub: Hub
 
@@ -7,6 +8,7 @@ const list = document.querySelector<HTMLUListElement>('#rail')!
 const above = document.querySelector<HTMLElement>('#rail-above')!
 const below = document.querySelector<HTMLElement>('#rail-below')!
 
+const FAVORITES = 'Favorites'
 const LABEL = Object.fromEntries(STATUS_ORDER.map(({ kind, label }) => [kind, label])) as Record<StatusKind, string>
 const LIFECYCLE: Record<Exclude<RowLifecycle, 'running'>, string> = {
   stopped: 'Not running',
@@ -28,11 +30,16 @@ new ResizeObserver(showEdges).observe(list)
 
 export function renderRail(view: Sidebar) {
   const items: HTMLLIElement[] = []
+  const { favorites } = view
+  if (favorites.rows.length > 0) {
+    if (favorites.collapsed) items.push(stack('favorites', FAVORITES, favorites.rows, favorites.status, false))
+    else items.push(caption(FAVORITES), ...favorites.rows.map((row) => tile(row, FAVORITES, 'fav:')))
+  }
   for (const group of view.groups) {
-    if (group.collapsed) items.push(stack(group))
+    if (group.collapsed) items.push(stack(group.id, group.name, group.rows, group.status, group.hidesSelected))
     else items.push(caption(group.name), ...group.rows.map((row) => tile(row, group.name)))
   }
-  if (view.groups.length > 0 && view.ungrouped.length > 0) items.push(caption(''))
+  if ((view.groups.length > 0 || favorites.rows.length > 0) && view.ungrouped.length > 0) items.push(caption(''))
   items.push(...view.ungrouped.map((row) => tile(row, null)))
   list.replaceChildren(...items)
   if (focusAfterRender) list.querySelector<HTMLElement>(`[data-focus="${CSS.escape(focusAfterRender)}"]`)?.focus({ preventScroll: true })
@@ -41,7 +48,7 @@ export function renderRail(view: Sidebar) {
 }
 
 export function revealRailSelection() {
-  list.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' })
+  reveal(list, list.querySelectorAll<HTMLElement>('[aria-selected="true"]'))
 }
 
 /** Two letters for a tile: the first letters of the first two words, or the first two letters of one word. */
@@ -82,7 +89,8 @@ function short(text: string): HTMLSpanElement {
   return element
 }
 
-function tile(row: Row, group: string | null): HTMLLIElement {
+/** A favorite has two tiles, so the copy in Favorites has the prefix `fav:` in its focus key. */
+function tile(row: Row, group: string | null, prefix = ''): HTMLLIElement {
   const item = document.createElement('li')
   const dimmed = row.lifecycle === 'paused' || row.lifecycle === 'stopped'
   item.className = dimmed ? 'rail-tile dimmed' : 'rail-tile'
@@ -90,7 +98,7 @@ function tile(row: Row, group: string | null): HTMLLIElement {
   item.tabIndex = 0
   item.ariaSelected = String(row.selected)
   item.dataset.root = row.root
-  item.dataset.focus = `rail:${row.root}`
+  item.dataset.focus = `${prefix}rail:${row.root}`
   const state = row.status ? LABEL[row.status] : LIFECYCLE[row.lifecycle as Exclude<RowLifecycle, 'running'>]
   const name = [row.label, state, group].filter(Boolean).join(' · ')
   item.ariaLabel = row.error ? `${name}. ${row.error}` : name
@@ -107,33 +115,34 @@ function tile(row: Row, group: string | null): HTMLLIElement {
   return item
 }
 
-/** A collapsed group: one tile with its count and its most urgent status. It opens a menu of its tabs. */
-function stack(group: GroupView): HTMLLIElement {
+/** A collapsed group or Favorites: one tile with its count and its most urgent status. It opens a menu of its tabs. */
+function stack(key: string, title: string, rows: Row[], status: StatusKind | null, selected: boolean): HTMLLIElement {
   const item = document.createElement('li')
-  const dimmed = group.rows.every((row) => row.lifecycle === 'paused' || row.lifecycle === 'stopped')
+  const dimmed = rows.every((row) => row.lifecycle === 'paused' || row.lifecycle === 'stopped')
   item.className = dimmed ? 'rail-tile stack dimmed' : 'rail-tile stack'
   item.role = 'tab'
   item.tabIndex = 0
-  item.ariaSelected = String(group.hidesSelected)
+  item.ariaSelected = String(selected)
   item.ariaHasPopup = 'menu'
-  item.dataset.group = group.id
-  item.dataset.focus = `railgroup:${group.id}`
-  const name = [group.name, `${group.count} ${group.count === 1 ? 'tab' : 'tabs'}`, group.status ? LABEL[group.status] : null].filter(Boolean).join(' · ')
+  // A group id is a UUID, so it never equals the key of Favorites.
+  const focus = `railgroup:${key}`
+  item.dataset.focus = focus
+  const name = [title, `${rows.length} ${rows.length === 1 ? 'tab' : 'tabs'}`, status ? LABEL[status] : null].filter(Boolean).join(' · ')
   item.ariaLabel = name
   item.title = name
-  // A marker counts each urgent status that the group holds, not only its most urgent one.
-  const urgent = URGENT.filter((kind) => group.rows.some((row) => row.status === kind))
+  // A marker counts each urgent status that the stack holds, not only its most urgent one.
+  const urgent = URGENT.filter((kind) => rows.some((row) => row.status === kind))
   if (urgent.length > 0) item.dataset.urgent = urgent.join(' ')
   const count = document.createElement('b')
   count.className = 'count'
-  count.textContent = String(group.count)
-  const groupFace = face(initialsOf(group.name), group.status)
-  groupFace.append(count)
-  item.append(groupFace, short(group.name))
+  count.textContent = String(rows.length)
+  const stackFace = face(initialsOf(title), status)
+  stackFace.append(count)
+  item.append(stackFace, short(title))
   const open = async () => {
     const { right, top } = item.getBoundingClientRect()
     const choice = await hub.pick(
-      group.rows.map((row) => ({
+      rows.map((row) => ({
         id: row.root,
         label: row.status && row.status !== 'idle' ? `${row.label} · ${LABEL[row.status]}` : row.label,
         checked: row.selected,
@@ -143,7 +152,7 @@ function stack(group: GroupView): HTMLLIElement {
     focusAfterRender = choice === null ? null : `rail:${choice}`
     if (choice !== null) hub.send({ type: 'select', root: choice })
     // A status answer can replace the tile while the menu is open.
-    else list.querySelector<HTMLElement>(`[data-focus="railgroup:${CSS.escape(group.id)}"]`)?.focus({ preventScroll: true })
+    else list.querySelector<HTMLElement>(`[data-focus="${CSS.escape(focus)}"]`)?.focus({ preventScroll: true })
   }
   item.addEventListener('click', open)
   item.addEventListener('keydown', (event) => {

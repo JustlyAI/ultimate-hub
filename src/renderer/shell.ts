@@ -6,6 +6,7 @@ import {
   sidebarWidth,
   TITLE_BAR,
   UNGROUPED,
+  type FavoritesView,
   type GroupId,
   type GroupView,
   type MainArea,
@@ -18,6 +19,7 @@ import {
 import { askName } from './name-dialog'
 import { showSheet } from './sheet'
 import { renderRail, revealRailSelection } from './rail'
+import { reveal } from './reveal'
 import { openSearch, refreshSearch } from './search'
 
 declare const hub: Hub
@@ -33,6 +35,8 @@ const RENAME_CHOICE = 'rename'
 const CLOSE_CHOICE = 'close'
 const REMOVE_CHOICE = 'remove'
 const REMOVE_MESSAGE = 'Instances move to Ungrouped. Their servers keep running.'
+// A favorite has two rows. The copy in Favorites has this prefix in each focus key.
+const FAVORITE_COPY = 'fav:'
 
 const sidebar = document.querySelector<HTMLElement>('#sidebar')!
 const top = document.querySelector<HTMLUListElement>('#top')!
@@ -44,13 +48,16 @@ const terminalButton = document.querySelector<HTMLButtonElement>('#terminal-togg
 const split = document.querySelector<HTMLElement>('#split')!
 const sidebarToggle = document.querySelector<HTMLButtonElement>('#sidebar-toggle')!
 
-let current: Parameters<typeof render> = [{ form: 'full', groups: [], ungrouped: [], status: [] }, { kind: 'empty' }]
+let current: Parameters<typeof render> = [
+  { form: 'full', favorites: { collapsed: false, status: null, rows: [] }, groups: [], ungrouped: [], status: [] },
+  { kind: 'empty' },
+]
 let revealed: string | undefined
 // A new state must not destroy a row while the user drags or renames it. It waits until they finish.
 let busy = false
 let pressedAt = 0
 let arranged = ''
-let newGroupFocusKey: string | null = null
+let pendingFocusKey: string | null = null
 let pendingRevealRoot: string | null = null
 // A press on a row's button must not start a drag of the row.
 let controlPressed = false
@@ -59,6 +66,7 @@ window.addEventListener('mouseup', () => (controlPressed = false), true)
 // Collapse is not part of it, so the user's own click on a header never waits.
 const arrangementOf = (view: Sidebar) =>
   JSON.stringify([
+    view.favorites.rows.map(({ root }) => root),
     view.groups.map(({ id, rows }) => [id, rows.map(({ root }) => root)]),
     view.ungrouped.map(({ root }) => root),
     view.status.map(({ kind, rows }) => [kind, rows.map(({ root }) => root)]),
@@ -173,6 +181,7 @@ function render(view: Sidebar, main: MainArea) {
   // A status answer rebuilds both lists, so focus moves to the new element with the same key.
   const focused = (document.activeElement as HTMLElement | null)?.dataset.focus
   top.replaceChildren(
+    ...(view.favorites.rows.length > 0 ? [favoritesItem(view)] : []),
     ...view.groups.map(groupItem),
     ...(view.groups.length > 0 ? [ungroupedHeader(view.ungrouped.length)] : []),
     ...view.ungrouped.map((row) => topRow(row, null)),
@@ -180,7 +189,7 @@ function render(view: Sidebar, main: MainArea) {
   status.replaceChildren(...view.status.flatMap((section) => [heading(section), ...section.rows.map(statusRow)]))
   renderRail(view)
   if (focused && document.hasFocus()) focusKey(focused, false)
-  if (newGroupFocusKey && focusKey(newGroupFocusKey, true)) newGroupFocusKey = null
+  if (pendingFocusKey && focusKey(pendingFocusKey, true)) pendingFocusKey = null
   revealNewSelection(view)
   revealPending()
   showMessage(main)
@@ -220,16 +229,14 @@ function showMessage(main: MainArea) {
 function revealNewSelection(view: Sidebar) {
   const selected = [...view.groups.flatMap(({ rows }) => rows), ...view.ungrouped].find((row) => row.selected)?.root
   if (selected === revealed) return
-  for (const list of [top, status]) list.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' })
+  for (const list of [top, status]) reveal(list, list.querySelectorAll<HTMLElement>('[aria-selected="true"]'))
   revealRailSelection()
   revealed = selected
 }
 
 function revealPending() {
-  const row = pendingRevealRoot === null ? null : top.querySelector<HTMLElement>(`.tab[data-root="${CSS.escape(pendingRevealRoot)}"]`)
-  if (!row || row.closest('[hidden]')) return
-  row.scrollIntoView({ block: 'nearest' })
-  pendingRevealRoot = null
+  if (pendingRevealRoot === null) return
+  if (reveal(top, top.querySelectorAll<HTMLElement>(`.tab[data-root="${CSS.escape(pendingRevealRoot)}"]`))) pendingRevealRoot = null
 }
 
 function focusKey(key: string, scroll: boolean): boolean {
@@ -334,6 +341,33 @@ function groupItem(group: GroupView): HTMLLIElement {
   return item
 }
 
+/** The same parts as a group, so that focus and collapse work the same. Its rows cannot be dragged or take a drop. */
+function favoritesItem(view: Sidebar): HTMLLIElement {
+  const favorites: FavoritesView = view.favorites
+  const item = document.createElement('li')
+  item.className = 'user-group favorites'
+  item.role = 'presentation'
+  const header = document.createElement('div')
+  header.className = 'group-header'
+  const toggle = document.createElement('button')
+  toggle.className = 'toggle'
+  toggle.ariaExpanded = String(!favorites.collapsed)
+  toggle.setAttribute('aria-controls', 'rows-favorites')
+  toggle.dataset.focus = 'favorites'
+  toggle.append(span('chevron', '›'), span('name', 'Favorites'))
+  toggle.addEventListener('click', () => hub.send({ type: 'collapse-favorites', collapsed: !favorites.collapsed }))
+  header.append(toggle, span('count', String(favorites.rows.length)))
+  const rows = document.createElement('ul')
+  rows.className = 'group-rows'
+  rows.id = 'rows-favorites'
+  rows.role = 'presentation'
+  rows.hidden = favorites.collapsed
+  const groupOf = (root: string) => view.groups.find((group) => group.rows.some((row) => row.root === root))?.id ?? null
+  rows.append(...favorites.rows.map((row) => topRow(row, groupOf(row.root), FAVORITE_COPY)))
+  item.append(header, rows)
+  return item
+}
+
 function ungroupedHeader(count: number): HTMLLIElement {
   const item = document.createElement('li')
   item.className = 'group-header ungrouped'
@@ -369,7 +403,7 @@ async function createGroup() {
   })
   if (name === null) return add.focus()
   const id = crypto.randomUUID() as GroupId
-  newGroupFocusKey = `group:${id}`
+  pendingFocusKey = `group:${id}`
   hub.send({ type: 'create-group', id, name })
 }
 
@@ -393,7 +427,7 @@ async function groupMenu(id: GroupId, at: Point) {
 }
 
 /** Rename, Close or Remove, then Move to group when the user has groups. The trailing button, a right-click, and Shift+F10 open it. */
-async function rowMenu(row: Row, from: GroupId | null, at: Point) {
+async function rowMenu(row: Row, from: GroupId | null, at: Point, prefix: string) {
   const { groups } = current[0]
   const first: MenuChoice =
     row.lifecycle === 'running'
@@ -413,7 +447,7 @@ async function rowMenu(row: Row, from: GroupId | null, at: Point) {
     ],
     at,
   )
-  if (choice === RENAME_CHOICE) rename(row.root)
+  if (choice === RENAME_CHOICE) rename(row.root, prefix)
   else if (choice === CLOSE_CHOICE) hub.lifecycle(row.root, 'close')
   else if (choice === REMOVE_CHOICE) hub.send({ type: 'remove', root: row.root })
   else if (choice !== null) hub.send({ type: 'move-to-group', root: row.root, groupId: choice === UNGROUPED_CHOICE ? null : (choice as GroupId) })
@@ -449,32 +483,35 @@ function statusRow(row: Row): HTMLLIElement {
   return item
 }
 
-function topRow(row: Row, groupId: GroupId | null): HTMLLIElement {
+/** `prefix` is FAVORITE_COPY for the copy in Favorites, and empty for the row in its group. */
+function topRow(row: Row, groupId: GroupId | null, prefix = ''): HTMLLIElement {
   const item = rowElement(row, 'tab')
-  item.draggable = true
   // Move to group must work from the keyboard, so the row takes focus.
   item.tabIndex = 0
-  item.dataset.focus = `row:${row.root}`
+  item.dataset.focus = `${prefix}row:${row.root}`
 
-  const life = lifecycleButton(row)
-  const menu = control('row-menu', `${row.label} menu`, `rowmenu:${row.root}`)
+  const star = starButton(row, prefix)
+  const life = lifecycleButton(row, prefix)
+  const menu = control('row-menu', `${row.label} menu`, `${prefix}rowmenu:${row.root}`)
   menu.ariaHasPopup = 'menu'
   menu.textContent = '⋯'
-  menu.addEventListener('click', () => rowMenu(row, groupId, below(menu)))
-  item.append(...(life ? [life] : []), menu)
+  menu.addEventListener('click', () => rowMenu(row, groupId, below(menu), prefix))
+  item.append(star, ...(life ? [life] : []), menu)
 
   item.addEventListener('dblclick', (event) => {
-    if (!(event.target as Element).closest('button')) rename(row.root)
+    if (!(event.target as Element).closest('button')) rename(row.root, prefix)
   })
   item.addEventListener('contextmenu', (event) => {
     event.preventDefault()
-    void rowMenu(row, groupId, { x: event.clientX, y: event.clientY })
+    void rowMenu(row, groupId, { x: event.clientX, y: event.clientY }, prefix)
   })
   item.addEventListener('keydown', (event) => {
     if (event.target !== item || !(event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey))) return
     event.preventDefault()
-    void rowMenu(row, groupId, below(item.querySelector<HTMLElement>('.label')!))
+    void rowMenu(row, groupId, below(item.querySelector<HTMLElement>('.label')!), prefix)
   })
+  if (prefix === FAVORITE_COPY) return item
+  item.draggable = true
   item.addEventListener('dragstart', (event) => {
     if (controlPressed) return event.preventDefault()
     busy = true
@@ -517,15 +554,31 @@ const ICON = {
   busy: '<circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="18 10"/>',
 }
 
+const STAR = '<path d="M7 1.6l1.6 3.4 3.7.5-2.7 2.6.7 3.7L7 10l-3.3 1.8.7-3.7-2.7-2.6 3.7-.5z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>'
+
+/** A toggle. A favorite shows it at all times, and another row shows it only on hover or focus. */
+function starButton(row: Row, prefix: string): HTMLButtonElement {
+  const button = control('star', `Favorite ${row.label}`, `${prefix}star:${row.root}`)
+  button.ariaPressed = String(row.favorite)
+  button.title = row.favorite ? 'Remove from Favorites' : 'Add to Favorites'
+  button.innerHTML = `<svg viewBox="0 0 14 14" width="14" height="14" fill="${row.favorite ? 'currentColor' : 'none'}" aria-hidden="true">${STAR}</svg>`
+  button.addEventListener('click', () => {
+    // The copy in Favorites goes away, so its row in the group takes the keyboard.
+    if (prefix === FAVORITE_COPY && button.matches(':focus-visible')) pendingFocusKey = `star:${row.root}`
+    hub.send({ type: 'favorite', root: row.root, favorite: !row.favorite })
+  })
+  return button
+}
+
 const BUSY: Partial<Record<RowLifecycle, string>> = { stopping: 'Stopping', closing: 'Closing', starting: 'Starting' }
 
 /** Pause on a running row, Start on a paused row, and a disabled progress indicator while Hub acts. */
-function lifecycleButton(row: Row): HTMLButtonElement | null {
+function lifecycleButton(row: Row, prefix: string): HTMLButtonElement | null {
   const progress = BUSY[row.lifecycle]
   const kind = row.lifecycle === 'running' ? 'pause' : row.lifecycle === 'paused' ? 'play' : progress ? 'busy' : null
   if (kind === null) return null
   const name = kind === 'pause' ? `Pause ${row.label}` : kind === 'play' ? `Start ${row.label}` : `${progress} ${row.label}`
-  const button = control(`life ${kind}`, name, `life:${row.root}`)
+  const button = control(`life ${kind}`, name, `${prefix}life:${row.root}`)
   button.innerHTML = `<svg viewBox="0 0 14 14" width="14" height="14" fill="currentColor" aria-hidden="true">${ICON[kind]}</svg>`
   if (kind === 'busy') button.disabled = true
   else button.addEventListener('click', () => hub.lifecycle(row.root, kind))
@@ -542,8 +595,8 @@ function clearMarker(item: HTMLElement) {
 }
 
 /** The row menu can return after a new state rebuilt the rows, so this finds the row again. */
-function rename(root: string) {
-  const item = top.querySelector<HTMLLIElement>(`.tab[data-root="${CSS.escape(root)}"]`)
+function rename(root: string, prefix: string) {
+  const item = top.querySelector<HTMLLIElement>(`.tab[data-focus="${CSS.escape(`${prefix}row:${root}`)}"]`)
   const tab = [...current[0].groups.flatMap(({ rows }) => rows), ...current[0].ungrouped].find((row) => row.root === root)
   if (!item || !tab) return
   const label = item.querySelector<HTMLElement>('.label')!
@@ -553,7 +606,7 @@ function rename(root: string) {
   input.className = 'rename'
   input.ariaLabel = `Rename ${tab.label}`
   // Enter rebuilds the rows, and the focus key moves focus to the new row.
-  input.dataset.focus = `row:${root}`
+  input.dataset.focus = `${prefix}row:${root}`
   input.value = tab.label
   let done = false
   const end = (commit: boolean) => {
